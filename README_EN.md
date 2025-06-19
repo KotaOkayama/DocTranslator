@@ -41,7 +41,7 @@ DocTranslator is a web-based document translation service that uses the Claude A
 
 1. **Pull Docker Image**:
 ```bash
-docker pull ghcr.io/your-username/doctranslator:latest
+docker pull ghcr.io/kotaokayama/doctranslator:latest
 ```
 
 2. **Start Container**:
@@ -50,7 +50,7 @@ docker run -d -p 8000:8000 --name doctranslator \
   -v $(pwd)/uploads:/app/uploads \
   -v $(pwd)/downloads:/app/downloads \
   -v $(pwd)/logs:/app/logs \
-  ghcr.io/your-username/doctranslator:latest
+  ghcr.io/kotaokayama/doctranslator:latest
 ```
 
 3. **Access Application**:
@@ -75,7 +75,7 @@ version: '3.8'
 
 services:
   doctranslator:
-    image: ghcr.io/your-username/doctranslator:latest
+    image: ghcr.io/kotaokayama/doctranslator:latest
     ports:
       - "8000:8000"
     volumes:
@@ -102,7 +102,7 @@ docker-compose up -d
 
 1. **Clone Repository**:
 ```bash
-git clone https://github.com/your-username/DocTranslator.git
+git clone https://github.com/kotaokayama/DocTranslator.git
 cd DocTranslator
 ```
 
@@ -133,7 +133,7 @@ make start
 
 1. **Clone and Setup**:
 ```bash
-git clone https://github.com/your-username/DocTranslator.git
+git clone https://github.com/kotaokayama/DocTranslator.git
 cd DocTranslator
 ```
 
