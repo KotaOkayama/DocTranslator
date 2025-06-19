@@ -1,0 +1,40 @@
+# 環境変数ファイル
+.env
+.env.*
+!.env.example
+
+# Git関連
+.git
+.gitignore
+.github
+
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# アプリケーション固有のディレクトリ
+uploads/*
+!uploads/.gitkeep
+downloads/*
+!downloads/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# 開発関連
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS関連
+.DS_Store
+Thumbs.db

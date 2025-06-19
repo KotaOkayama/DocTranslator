@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  document-translator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: doctranslator-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - GENAI_HUB_API_KEY=${GENAI_HUB_API_KEY}
+      - GENAI_HUB_API_URL=${GENAI_HUB_API_URL}
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - HOME=/tmp
+      - TMPDIR=/tmp
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+      - translation-cache:/app/cache
+      - /tmp:/tmp
+    restart: unless-stopped
+    # 特権モードでLibreOfficeを安定動作させる
+    privileged: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+volumes:
+  translation-cache:
