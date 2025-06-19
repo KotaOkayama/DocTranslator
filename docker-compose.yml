@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  document-translator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - TZ=Asia/Tokyo
+      - GENAI_HUB_API_KEY=${GENAI_HUB_API_KEY}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  translation-cache:
