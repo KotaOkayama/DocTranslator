@@ -28,6 +28,8 @@ DocTranslatorは、GenAI Hubを使用してPowerPoint (.pptx)、Word (.docx)、P
 - ドイツ語 (de)
 - スペイン語 (es)
 - ヒンディー語 (hi)
+- ベトナム語 (vi)
+- タイ語 (th)
 
 ## 📋 必要なもの
 

@@ -28,6 +28,8 @@ DocTranslator is a web-based document translation service that uses the GenAI HU
 - German (de)
 - Spanish (es)
 - Hindi (hi)
+- Vietnamese (vi)
+- Thai (th)
 
 ## 📋 Requirements
 
