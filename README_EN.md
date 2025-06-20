@@ -33,6 +33,7 @@ DocTranslator is a web-based document translation service that uses the GenAI HU
 
 ### Required Software
 - Docker (e.g., Rancher Desktop)
+- GenAI Hub API URL
 - GenAI Hub API Key
 
 ## 🚀 Quick Start (For Users)
