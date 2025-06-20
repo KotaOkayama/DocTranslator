@@ -1,6 +1,6 @@
 # DocTranslator
 
-DocTranslator is a web-based document translation service that uses the Claude API to translate PowerPoint (.pptx), Word (.docx), and PDF files.
+DocTranslator is a web-based document translation service that uses the GenAI HUB to translate PowerPoint (.pptx), Word (.docx), and PDF files.
 
 ## UI Screenshots
 
@@ -33,7 +33,7 @@ DocTranslator is a web-based document translation service that uses the Claude A
 
 ### Required Software
 - Docker (e.g., Rancher Desktop)
-- Claude API Key
+- GenAI Hub API Key
 
 ## 🚀 Quick Start (For Users)
 
@@ -55,7 +55,7 @@ docker run -d -p 8000:8000 --name doctranslator \
 
 3. **Access Application**:
 - Open http://localhost:8000 in your browser
-- Configure Claude API Key and API URL on first launch
+- Configure API Key and API URL on first launch
 
 4. **Stop Container**:
 ```bash
@@ -94,7 +94,7 @@ docker-compose up -d
 
 3. **Access Application**:
 - Open http://localhost:8000 in your browser
-- Configure Claude API Key and API URL on first launch
+- Configure API Key and API URL on first launch
 
 ## 🚀 Quick Start (For Developers)
 
@@ -127,7 +127,7 @@ make start
 
 4. **Access Application**:
 - Open http://localhost:8000 in your browser
-- Configure Claude API Key and API URL on first launch
+- Configure API Key and API URL on first launch
 
 ### Local Installation
 
@@ -211,8 +211,8 @@ docker-compose -f docker-compose.dev.yml exec document-translator pytest
 
 Manage environment variables in `.env` file:
 
-- `GENAI_HUB_API_KEY`: Claude API Key (configurable via UI)
-- `GENAI_HUB_API_URL`: Claude API URL (configurable via UI)
+- `GENAI_HUB_API_KEY`: API Key (configurable via UI)
+- `GENAI_HUB_API_URL`: API URL (configurable via UI)
 - `DEBUG`: Enable debug mode (default: false)
 - `LOG_LEVEL`: Logging level (default: INFO)
 - `MAX_FILE_SIZE`: Maximum upload file size (default: 100MB)
