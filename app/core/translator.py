@@ -72,6 +72,8 @@ LANGUAGES = {
     "de": "German",
     "es": "Spanish",
     "hi": "Hindi",
+    "vi": "Vietnamese",
+    "th": "Thai",
 }
 
 # Translation Settings
