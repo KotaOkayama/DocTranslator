@@ -1,6 +1,6 @@
 # DocTranslator
 
-DocTranslatorは、Claude APIを使用してPowerPoint (.pptx)、Word (.docx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
+DocTranslatorは、GenAI Hubを使用してPowerPoint (.pptx)、Word (.docx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
 
 ## UI スクリーンショット
 
@@ -33,7 +33,7 @@ DocTranslatorは、Claude APIを使用してPowerPoint (.pptx)、Word (.docx)、
 
 ### 必須ソフトウェア
 - Docker (Rancher Desktop など)
-- Claude API キー
+- GenAI Hub API キー
 
 ## 🚀 クイックスタート（利用者向け）
 
@@ -55,7 +55,7 @@ docker run -d -p 8000:8000 --name doctranslator \
 
 3. **アプリケーションへのアクセス**:
 - ブラウザで http://localhost:8000 を開く
-- 初回起動時にClaude API キーとAPI URLを設定
+- 初回起動時にAPI キーとAPI URLを設定
 
 4. **コンテナの停止**:
 ```bash
@@ -94,7 +94,7 @@ docker-compose up -d
 
 3. **アプリケーションへのアクセス**:
 - ブラウザで http://localhost:8000 を開く
-- 初回起動時にClaude API キーとAPI URLを設定
+- 初回起動時にAPI キーとAPI URLを設定
 
 ## 🚀 クイックスタート（開発者向け）
 
@@ -127,7 +127,7 @@ make start
 
 4. **アプリケーションへのアクセス**:
 - ブラウザで http://localhost:8000 を開く
-- 初回起動時にClaude API キーとAPI URLを設定
+- 初回起動時にAPI キーとAPI URLを設定
 
 ### ローカルインストール
 
@@ -211,8 +211,8 @@ docker-compose -f docker-compose.dev.yml exec document-translator pytest
 
 `.env`ファイルで環境変数を管理します：
 
-- `GENAI_HUB_API_KEY`: Claude API キー（UIから設定可能）
-- `GENAI_HUB_API_URL`: Claude API URL（UIから設定可能）
+- `GENAI_HUB_API_KEY`: API キー（UIから設定可能）
+- `GENAI_HUB_API_URL`: API URL（UIから設定可能）
 - `DEBUG`: デバッグモードの有効化（デフォルト: false）
 - `LOG_LEVEL`: ログレベル（デフォルト: INFO）
 - `MAX_FILE_SIZE`: 最大アップロードファイルサイズ（デフォルト: 100MB）
