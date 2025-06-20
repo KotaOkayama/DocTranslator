@@ -33,6 +33,7 @@ DocTranslatorは、GenAI Hubを使用してPowerPoint (.pptx)、Word (.docx)、P
 
 ### 必須ソフトウェア
 - Docker (Rancher Desktop など)
+- GenAI Hub API URL
 - GenAI Hub API キー
 
 ## 🚀 クイックスタート（利用者向け）
