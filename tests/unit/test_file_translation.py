@@ -543,34 +543,21 @@ from app.core.translator import translate_xlsx
 def dummy_translate_func(text):
     return f"{text}_translated"
 
-# tests/unit/test_file_translation.py
-
-import pytest
-import pandas as pd
-from app.core.translator import translate_xlsx
-
 def test_translate_xlsx(tmp_path):
-    """Excel翻訳の基本機能テスト"""
-    # テストファイルの準備
+    # 入力ファイル作成
     input_path = tmp_path / "test.xlsx"
-    output_path = tmp_path / "output.xlsx"
-    
-    # 簡単なテストデータを作成
+    output_path = tmp_path / "translated.xlsx"
+
     df = pd.DataFrame({
-        "Text": ["Hello", "World"]
+        "A": ["Hello", "World"],
+        "B": ["Test", "Excel"]
     })
-    df.to_excel(input_path, index=False)
+    df.to_excel(input_path, index=False, engine="openpyxl")
 
     # 翻訳実行
-    extracted_file, translated_file = translate_xlsx(
-        input_path=str(input_path),
-        output_path=str(output_path),
-        api_key="test_api_key"  # テスト用のAPIキー
-    )
+    translate_xlsx(str(input_path), str(output_path), dummy_translate_func)
 
-    # 基本的な検証
-    assert output_path.exists()  # 出力ファイルが生成されたことを確認
-    
-    # 翻訳結果の読み込みと確認
-    result_df = pd.read_excel(output_path)
-    assert len(result_df) == len(df)  # 行数が維持されていることを確認
+    # 結果確認
+    df_translated = pd.read_excel(output_path, engine="openpyxl")
+    assert df_translated.iloc[0, 0] == "Hello_translated"
+    assert df_translated.iloc[1, 1] == "Excel_translated"
