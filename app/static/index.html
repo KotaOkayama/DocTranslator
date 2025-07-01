@@ -15,15 +15,15 @@
                 <div class="card">
                     <div class="card-body">
                         <h2 class="card-title text-center mb-4">API Configuration</h2>
-                        <p class="text-center mb-4">Please configure your Claude API Key and API URL to use the translation service.</p>
+                        <p class="text-center mb-4">Please configure your GenAI Hub API Key and API URL to use the translation service.</p>
                         <form id="apiSettingsForm" onsubmit="return false;">
                             <div class="mb-3">
-                                <label for="apiKey" class="form-label">Claude API Key</label>
-                                <input type="password" class="form-control" id="apiKey" placeholder="Enter your Anthropic Claude API Key">
+                                <label for="apiKey" class="form-label">GenAI HUB API Key</label>
+                                <input type="password" class="form-control" id="apiKey" placeholder="Enter your Anthropic GenAI HUB API Key">
                             </div>
                             <div class="mb-3">
-                                <label for="apiUrl" class="form-label">Claude API URL</label>
-                                <input type="text" class="form-control" id="apiUrl" placeholder="Enter the Claude API endpoint URL">
+                                <label for="apiUrl" class="form-label">GenAI HUB API URL</label>
+                                <input type="text" class="form-control" id="apiUrl" placeholder="Enter the GenAI HUB API endpoint URL">
                             </div>
                             <button type="button" class="btn btn-primary w-100" onclick="saveApiSettings()">Save Configuration</button>
                         </form>
@@ -48,8 +48,8 @@
             <!-- File Selection -->
             <div class="mb-3">
                 <label for="file">Select File to Translate:</label>
-                <input type="file" class="form-control" id="file" name="file" accept=".pptx,.docx,.pdf" onchange="validateFileInput()">
-                <small class="text-muted">* Supports PowerPoint (.pptx), Word (.docx), PDF (.pdf)</small>
+                <input type="file" class="form-control" id="file" name="file" accept=".pptx,.docx,.pdf,.xlsx" onchange="validateFileInput()">
+                <small class="text-muted">* Supports PowerPoint (.pptx), Word (.docx), PDF (.pdf), Excel (.xlsx)</small>
             </div>
 
             <!-- Model Selection -->
@@ -136,12 +136,12 @@
             </div>
             <div class="modal-body">
                 <div class="mb-3">
-                    <label for="modalApiKey" class="form-label">Claude API Key</label>
+                    <label for="modalApiKey" class="form-label">GenAI HUB API Key</label>
                     <input type="password" class="form-control" id="modalApiKey" placeholder="Update API Key">
                     <button class="btn btn-secondary mt-2" onclick="updateApiKey()">Update API Key</button>
                 </div>
                 <div class="mb-3">
-                    <label for="modalApiUrl" class="form-label">Claude API URL</label>
+                    <label for="modalApiUrl" class="form-label">GenAI HUB API URL</label>
                     <input type="text" class="form-control" id="modalApiUrl" readonly>
                 </div>
                 <hr>

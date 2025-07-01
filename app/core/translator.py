@@ -1577,6 +1577,100 @@ def translate_pdf(
                 logger.error(f"すべての変換方法が失敗しました: {final_error}")
                 raise ValueError(f"PDF翻訳に失敗しました: {str(final_error)}")
 
+def translate_xlsx(
+    input_path: str,
+    output_path: str,
+    api_key: str = None,
+    model: str = "claude-3-5-haiku",
+    source_lang: str = "en",
+    target_lang: str = "ja",
+    progress_callback: Optional[Callable] = None,
+    save_text_files_flag: bool = True,
+    ai_instruction: str = "",
+    check_cancelled: Optional[Callable] = None,
+) -> tuple:
+    """
+    XLSXファイルを翻訳します。
+    """
+    logger.info(f"Excel翻訳を開始: {input_path} -> {output_path}")
+
+    try:
+        # 進捗表示
+        if progress_callback:
+            progress_callback(0.1)
+
+        # Excelファイルを読み込み
+        excel = pd.read_excel(input_path, sheet_name=None, engine="openpyxl")
+        total_sheets = len(excel)
+        
+        # テキストデータを抽出してDataFrameに変換
+        text_data = []
+        for sheet_idx, (sheet_name, df) in enumerate(excel.items()):
+            if check_cancelled and check_cancelled():
+                return None, None
+                
+            for row_idx, row in df.iterrows():
+                for col_idx, value in row.items():
+                    if isinstance(value, str) and value.strip():
+                        text_data.append({
+                            'sheet_name': sheet_name,
+                            'row': row_idx,
+                            'column': col_idx,
+                            'original_text': value.strip()
+                        })
+            
+            if progress_callback:
+                progress_callback(0.1 + (sheet_idx / total_sheets * 0.2))
+
+        # テキストデータをDataFrameに変換
+        text_df = pd.DataFrame(text_data)
+
+        # テキストファイルを保存
+        output_dir = os.path.dirname(output_path)
+        base_filename = os.path.splitext(os.path.basename(output_path))[0]
+        extracted_file = None
+        translated_file = None
+
+        if save_text_files_flag:
+            extracted_file, _ = save_text_files(text_df, output_dir, base_filename)
+
+        # テキストを翻訳
+        text_df = translate_dataframe(
+            text_df,
+            api_key,
+            model,
+            source_lang,
+            target_lang,
+            lambda p: progress_callback(0.3 + p * 0.5) if progress_callback else None,
+            ai_instruction,
+            check_cancelled
+        )
+
+        if save_text_files_flag:
+            _, translated_file = save_text_files(text_df, output_dir, base_filename)
+
+        # 翻訳結果をExcelに反映
+        translated_excel = excel.copy()
+        for _, row in text_df.iterrows():
+            if check_cancelled and check_cancelled():
+                return extracted_file, translated_file
+                
+            sheet = translated_excel[row['sheet_name']]
+            sheet.at[row['row'], row['column']] = row['translated_text']
+
+        # 翻訳したExcelファイルを保存
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            for sheet_name, df in translated_excel.items():
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        if progress_callback:
+            progress_callback(1.0)
+
+        return extracted_file, translated_file
+
+    except Exception as e:
+        logger.error(f"Excel翻訳エラー: {e}")
+        raise
 
 def translate_pptx(
     input_path: str,
@@ -2208,6 +2302,8 @@ def detect_file_type(file_path: str) -> str:
         return "docx"
     elif ext == ".pdf":
         return "pdf"
+    elif ext == ".xlsx":
+        return "xlsx"
     else:
         raise ValueError(f"サポートされていないファイル形式です: {ext}")
 
@@ -2222,26 +2318,13 @@ def translate_document(
     progress_callback: Optional[Callable] = None,
     save_text_files_flag: bool = True,
     ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    ドキュメント（PPTX, DOCX, PDF）を翻訳します。
-
-    Args:
-        input_path: 入力ファイルのパス
-        output_path: 出力ファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
-
-    Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+    ドキュメント（PPTX, DOCX, PDF, XLSX）を翻訳します。
     """
+    logger.info(f"ドキュメント翻訳を開始: {input_path} -> {output_path}")
+
     # 起動時にキャッシュをロード
     if TRANSLATION_CONFIG["use_cache"] and not TRANSLATION_CACHE:
         load_translation_cache()
@@ -2254,7 +2337,21 @@ def translate_document(
             logger.info("Translation cancelled by user")
             return None, None
 
-        if file_type == "pptx":
+        # ファイル形式に応じた処理
+        if file_type == "xlsx":
+            result = translate_xlsx(
+                input_path,
+                output_path,
+                api_key,
+                model,
+                source_lang,
+                target_lang,
+                progress_callback,
+                save_text_files_flag,
+                ai_instruction,
+                check_cancelled
+            )
+        elif file_type == "pptx":
             result = translate_pptx(
                 input_path,
                 output_path,
@@ -2265,7 +2362,7 @@ def translate_document(
                 progress_callback,
                 save_text_files_flag,
                 ai_instruction,
-                check_cancelled,  # 中止チェック関数を渡す
+                check_cancelled
             )
         elif file_type == "docx":
             result = translate_docx(
@@ -2278,7 +2375,7 @@ def translate_document(
                 progress_callback,
                 save_text_files_flag,
                 ai_instruction,
-                check_cancelled,  # 中止チェック関数を渡す
+                check_cancelled
             )
         elif file_type == "pdf":
             result = translate_pdf(
@@ -2291,7 +2388,7 @@ def translate_document(
                 progress_callback,
                 save_text_files_flag,
                 ai_instruction,
-                check_cancelled,  # 中止チェック関数を渡す
+                check_cancelled
             )
         else:
             raise ValueError(f"サポートされていないファイル形式です: {file_type}")
@@ -2301,12 +2398,13 @@ def translate_document(
             save_translation_cache()
 
         return result
+
     except Exception as e:
         logger.error(f"翻訳エラー: {e}")
-        # エラー発生時もキャッシュを保存
         if TRANSLATION_CONFIG["use_cache"]:
             save_translation_cache()
         raise
+
 
 
 # テスト用コード
@@ -2340,3 +2438,89 @@ __all__ = [
     "load_translation_cache",
     "save_translation_cache",
 ]
+
+def translate_xlsx(
+    input_path: str,
+    output_path: str,
+    api_key: str = None,
+    model: str = "claude-3-5-haiku",
+    source_lang: str = "en",
+    target_lang: str = "ja",
+    progress_callback: Optional[Callable] = None,
+    save_text_files_flag: bool = True,
+    ai_instruction: str = "",
+    check_cancelled: Optional[Callable] = None,
+) -> tuple:
+    """
+    XLSXファイルを翻訳します。
+
+    Args:
+        input_path: 入力Excelファイルのパス
+        output_path: 出力Excelファイルのパス
+        api_key: GenAI Hub API キー
+        model: 使用するモデル名
+        source_lang: 元の言語コード
+        target_lang: 翻訳先の言語コード
+        progress_callback: 進捗を報告するコールバック関数
+        save_text_files_flag: テキストファイルを保存するかどうか
+        ai_instruction: AIへの補足指示
+        check_cancelled: 中止状態をチェックする関数
+
+    Returns:
+        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+    """
+    logger.info(f"Excel翻訳を開始: {input_path} -> {output_path}")
+
+    try:
+        # 進捗表示
+        if progress_callback:
+            progress_callback(0.1)
+
+        # Excelファイルを読み込み
+        excel = pd.read_excel(input_path, sheet_name=None, engine="openpyxl")
+        total_sheets = len(excel)
+        translated_excel = {}
+
+        # 翻訳関数を定義
+        def translate_text(text):
+            if not isinstance(text, str) or not text.strip():
+                return text
+            return translate_text_with_cache(
+                text,
+                api_key,
+                model,
+                source_lang,
+                target_lang,
+                ai_instruction
+            )
+
+        # 各シートを処理
+        for sheet_idx, (sheet_name, df) in enumerate(excel.items()):
+            if check_cancelled and check_cancelled():
+                return None, None
+
+            # 進捗更新
+            if progress_callback:
+                progress = 0.1 + (sheet_idx / total_sheets * 0.8)
+                progress_callback(progress)
+
+            # 文字列のみを翻訳
+            df_translated = df.applymap(translate_text)
+            translated_excel[sheet_name] = df_translated
+
+        # 翻訳結果を保存
+        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+            for sheet_name, df in translated_excel.items():
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+        if progress_callback:
+            progress_callback(1.0)
+
+        logger.info(f"Excel翻訳が完了しました: {output_path}")
+        
+        # テキストファイルのパスを返す（この例では実装していない）
+        return None, None
+
+    except Exception as e:
+        logger.error(f"Excel翻訳エラー: {e}")
+        raise

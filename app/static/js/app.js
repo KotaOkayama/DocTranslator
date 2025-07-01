@@ -572,11 +572,11 @@ function validateFileInput() {
     
     if (file) {
         const fileName = file.name.toLowerCase();
-        const validExtensions = ['.docx', '.pptx', '.pdf'];
+        const validExtensions = ['.docx', '.pptx', '.pdf', '.xlsx'];
         const isValid = validExtensions.some(ext => fileName.endsWith(ext));
         
         if (!isValid) {
-            showError('Please select a valid file (DOCX, PPTX, or PDF)');
+            showError('Please select a valid file (DOCX, PPTX, PDF or XLSX)');
             fileInput.value = '';
             if (submitButton) submitButton.disabled = true;
         } else {

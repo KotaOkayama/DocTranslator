@@ -535,3 +535,29 @@ def test_download_translated_text_file(client, tmp_path):
 
     assert response.status_code == 200
     assert response.headers["content-type"] == "text/plain; charset=utf-8"
+
+import tempfile
+import pandas as pd
+from app.core.translator import translate_xlsx
+
+def dummy_translate_func(text):
+    return f"{text}_translated"
+
+def test_translate_xlsx(tmp_path):
+    # 入力ファイル作成
+    input_path = tmp_path / "test.xlsx"
+    output_path = tmp_path / "translated.xlsx"
+
+    df = pd.DataFrame({
+        "A": ["Hello", "World"],
+        "B": ["Test", "Excel"]
+    })
+    df.to_excel(input_path, index=False, engine="openpyxl")
+
+    # 翻訳実行
+    translate_xlsx(str(input_path), str(output_path), dummy_translate_func)
+
+    # 結果確認
+    df_translated = pd.read_excel(output_path, engine="openpyxl")
+    assert df_translated.iloc[0, 0] == "Hello_translated"
+    assert df_translated.iloc[1, 1] == "Excel_translated"
