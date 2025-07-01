@@ -39,16 +39,19 @@ WORKDIR /app
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# 必要なパッケージを先にインストール
+# Excel関連の依存関係を先にインストール
 RUN pip install --no-cache-dir et-xmlfile>=2.0.0 && \
     pip install --no-cache-dir openpyxl>=3.1.0 && \
     pip install --no-cache-dir pandas>=1.3.0
 
-# インストール確認
-RUN python3 -c "import openpyxl; print('openpyxl version:', openpyxl.__version__)" && \
-    python3 -c "import pandas; print('pandas version:', pandas.__version__)"
+# Excel関連パッケージのインストール確認
+RUN python3 -c "import openpyxl, et_xmlfile, pandas; \
+    print('Installed versions:', \
+    'openpyxl:', openpyxl.__version__, \
+    'pandas:', pandas.__version__, \
+    'et_xmlfile is installed')" || true
 
-# 基本的な依存関係を先にインストール
+# 基本的な依存関係をインストール
 RUN pip install --no-cache-dir \
     fastapi==0.104.1 \
     starlette==0.27.0 \
@@ -57,16 +60,16 @@ RUN pip install --no-cache-dir \
     websockets==12.0 \
     python-dotenv==1.0.0
 
-# データ処理関連のパッケージを個別にインストール
+# データ処理関連のパッケージをインストール
 RUN pip install --no-cache-dir python-pptx>=0.6.21 && \
     pip install --no-cache-dir python-docx>=0.8.11
 
-# PDF処理関連
+# PDF処理関連パッケージをインストール
 RUN pip install --no-cache-dir \
     PyPDF2>=3.0.0 \
     pdfplumber>=0.9.0
 
-# その他のユーティリティ
+# その他のユーティリティをインストール
 RUN pip install --no-cache-dir \
     requests>=2.26.0 \
     tqdm>=4.62.0 \
@@ -78,28 +81,23 @@ RUN pip install --no-cache-dir \
     fonttools>=4.38.0 \
     httpx==0.24.1
 
-# 開発用依存関係
+# 開発用依存関係をインストール
 RUN pip install --no-cache-dir -r requirements-dev.txt
-
-# インストール確認用のデバッグ出力
-RUN pip list | grep openpyxl && \
-    pip list | grep et-xmlfile
 
 # アプリケーションコードのコピー
 COPY . .
 
 # 必要なディレクトリの作成と権限設定
-# パッケージインストールディレクトリの権限を設定
-RUN chmod -R 777 /usr/local/lib/python3.11/site-packages
-
-# 必要なディレクトリの作成と権限設定
-RUN mkdir -p /app/uploads /app/downloads /app/logs /app/cache && \
+RUN chmod -R 777 /usr/local/lib/python3.11/site-packages && \
+    mkdir -p /app/uploads /app/downloads /app/logs /app/cache && \
     chmod -R 777 /app/uploads /app/downloads /app/logs /app/cache
 
 # 環境変数設定
-ENV DISPLAY=:99
-ENV HOME=/tmp
-ENV TMPDIR=/tmp
+ENV DISPLAY=:99 \
+    HOME=/tmp \
+    TMPDIR=/tmp \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
@@ -115,5 +113,9 @@ libreoffice --headless --version || echo "LibreOffice test failed"\n\
 echo "Starting application..."\n\
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload\n\
 ' > /app/start.sh && chmod +x /app/start.sh
+
+# ヘルスチェックの追加
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
 CMD ["/app/start.sh"]
