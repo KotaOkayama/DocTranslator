@@ -1,10 +1,5 @@
 # DocTranslator
-
-<<<<<<< HEAD
-DocTranslator is a web-based document translation service that uses the GenAI HUB to translate PowerPoint (.pptx), Word (.docx), and PDF files.
-=======
 DocTranslator is a web-based document translation service that uses the Claude API to translate PowerPoint (.pptx), Word (.docx), Excel (.xlsx) and PDF files.
->>>>>>> b252d33 ( Changes to be committed:)
 
 ## UI Screenshots
 
