@@ -479,11 +479,11 @@ async def translate_file(
             logger.error("File name is empty")
             raise HTTPException(status_code=400, detail="File name is empty")
 
-        if not file.filename.lower().endswith((".pptx", ".docx", ".pdf")):
+        if not file.filename.lower().endswith((".pptx", ".docx", ".pdf", ".xlsx")):
             logger.error(f"Unsupported file format: {file.filename}")
             raise HTTPException(
                 status_code=400,
-                detail="Unsupported file format. Only PPTX, DOCX, PDF are supported.",
+                detail="Unsupported file format. Only PPTX, DOCX, PDF, XLSX are supported.",
             )
 
         # Model validation
@@ -875,3 +875,19 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# --- XLSX 追加対応 ---
+from app.core import translator
+
+def handle_file(file_path: str, output_path: str, translate_func):
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".docx":
+        translator.translate_docx(file_path, output_path, translate_func)
+    elif ext == ".pptx":
+        translator.translate_pptx(file_path, output_path, translate_func)
+    elif ext == ".pdf":
+        translator.translate_pdf(file_path, output_path, translate_func)
+    elif ext == ".xlsx":
+        translator.translate_xlsx(file_path, output_path, translate_func)
+    else:
+        raise ValueError(f"Unsupported file type: {ext}")
