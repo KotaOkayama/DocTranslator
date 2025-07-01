@@ -1,6 +1,5 @@
 # DocTranslator
-
-DocTranslatorは、GenAI Hubを使用してPowerPoint (.pptx)、Word (.docx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
+DocTranslatorは、Claude APIを使用してPowerPoint (.pptx)、Word (.docx)、EXCEL (.xlsx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
 
 ## UI スクリーンショット
 
@@ -12,7 +11,7 @@ DocTranslatorは、GenAI Hubを使用してPowerPoint (.pptx)、Word (.docx)、P
 
 ## 🚀 機能
 
-- 📄 **マルチフォーマットサポート**: PPTX、DOCX、PDFファイルを翻訳
+- 📄 **マルチフォーマットサポート**: PPTX、DOCX、XLSX、PDFファイルを翻訳
 - 🤖 **AI搭載**: 複数のClaudeモデル（Claude 4 Sonnet、3.7 Sonnet、3.5 Sonnet V2、3.5 Haiku）
 - 🌐 **Webインターフェース**: リアルタイム進捗表示のクリーンで応答性の高いUI
 - ⚡ **PDF処理**: 高品質PDF変換のためのLibreOffice統合
