@@ -1,5 +1,5 @@
 # DocTranslator
-DocTranslatorは、Claude APIを使用してPowerPoint (.pptx)、Word (.docx)、EXCEL (.xlsx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
+DocTranslatorは、GenAI HUB APIを使用してPowerPoint (.pptx)、Word (.docx)、Excel (.xlsx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
 
 ## UI スクリーンショット
 
@@ -48,11 +48,7 @@ docker pull ghcr.io/kotaokayama/doctranslator:latest
 
 2. **コンテナの起動**:
 ```bash
-docker run -d -p 8000:8000 --name doctranslator \
-  -v $(pwd)/uploads:/app/uploads \
-  -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/logs:/app/logs \
-  ghcr.io/kotaokayama/doctranslator:latest
+docker run -d -p 8000:8000 --name doctranslator ghcr.io/kotaokayama/doctranslator:latest
 ```
 
 3. **アプリケーションへのアクセス**:
