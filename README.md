@@ -1,77 +1,73 @@
 # DocTranslator
-DocTranslatorは、Claude APIを使用してPowerPoint (.pptx)、Word (.docx)、EXCEL (.xlsx)、PDFファイルを翻訳するウェブベースの文書翻訳サービスです。
+DocTranslator is a web-based document translation service that uses the GenAI HUB API to translate PowerPoint (.pptx), Word (.docx), Excel (.xlsx) and PDF files.
 
-## UI スクリーンショット
+## UI Screenshots
 
-### API設定画面（初回起動時）
-![API設定画面](images/API.png)
+### API Configuration Screen (First Launch)
+![API Configuration Screen](images/API.png)
 
-### メインUI画面
-![メインUI画面](images/UI.png)
+### Main UI Screen
+![Main UI Screen](images/UI.png)
 
-## 🚀 機能
+## 🚀 Features
 
-- 📄 **マルチフォーマットサポート**: PPTX、DOCX、XLSX、PDFファイルを翻訳
-- 🤖 **AI搭載**: 複数のClaudeモデル（Claude 4 Sonnet、3.7 Sonnet、3.5 Sonnet V2、3.5 Haiku）
-- 🌐 **Webインターフェース**: リアルタイム進捗表示のクリーンで応答性の高いUI
-- ⚡ **PDF処理**: 高品質PDF変換のためのLibreOffice統合
-- 🐳 **コンテナ化**: Dockerによる簡単な開発とデプロイ
+- 📄 **Multi-format Support**: Translate PPTX, DOCX, XLSX and PDF files
+- 🤖 **AI-Powered**: Multiple Claude models (Claude 4 Sonnet, 3.7 Sonnet, 3.5 Sonnet V2, 3.5 Haiku)
+- 🌐 **Web Interface**: Clean and responsive UI with real-time progress display
+- ⚡ **PDF Processing**: LibreOffice integration for high-quality PDF conversion
+- 🐳 **Containerized**: Easy development and deployment with Docker
 
-## 🎯 サポート言語
+## 🎯 Supported Languages
 
-- 英語 (en)
-- 日本語 (ja)
-- 韓国語 (ko)
-- 中国語 (zh)
-- フランス語 (fr)
-- ドイツ語 (de)
-- スペイン語 (es)
-- ヒンディー語 (hi)
-- ベトナム語 (vi)
-- タイ語 (th)
+- English (en)
+- Japanese (ja)
+- Korean (ko)
+- Chinese (zh)
+- French (fr)
+- German (de)
+- Spanish (es)
+- Hindi (hi)
+- Vietnamese (vi)
+- Thai (th)
 
-## 📋 必要なもの
+## 📋 Requirements
 
-### 必須ソフトウェア
-- Docker (Rancher Desktop など)
+### Required Software
+- Docker (e.g., Rancher Desktop)
 - GenAI Hub API URL
-- GenAI Hub API キー
+- GenAI Hub API Key
 
-## 🚀 クイックスタート（利用者向け）
+## 🚀 Quick Start (For Users)
 
-### GitHub Container Registry からのイメージ利用
+### Using GitHub Container Registry Image
 
-1. **Dockerイメージのプル**:
+1. **Pull Docker Image**:
 ```bash
 docker pull ghcr.io/kotaokayama/doctranslator:latest
 ```
 
-2. **コンテナの起動**:
+2. **Start Container**:
 ```bash
-docker run -d -p 8000:8000 --name doctranslator \
-  -v $(pwd)/uploads:/app/uploads \
-  -v $(pwd)/downloads:/app/downloads \
-  -v $(pwd)/logs:/app/logs \
-  ghcr.io/kotaokayama/doctranslator:latest
+docker run -d -p 8000:8000 --name doctranslator ghcr.io/kotaokayama/doctranslator:latest
 ```
 
-3. **アプリケーションへのアクセス**:
-- ブラウザで http://localhost:8000 を開く
-- 初回起動時にAPI キーとAPI URLを設定
+3. **Access Application**:
+- Open http://localhost:8000 in your browser
+- Configure API Key and API URL on first launch
 
-4. **コンテナの停止**:
+4. **Stop Container**:
 ```bash
 docker stop doctranslator
 ```
 
-5. **コンテナの起動(2回目以降)**:
+5. **Start Container (Subsequent Times)**:
 ```bash
 docker start doctranslator
 ```
 
-### Docker Composeを使用する場合
+### Using Docker Compose
 
-1. **docker-compose.ymlファイルの作成**:
+1. **Create docker-compose.yml**:
 ```yaml
 version: '3.8'
 
@@ -89,220 +85,220 @@ services:
       - TZ=Asia/Tokyo
 ```
 
-2. **コンテナの起動**:
+2. **Start Container**:
 ```bash
 docker-compose up -d
 ```
 
-3. **アプリケーションへのアクセス**:
-- ブラウザで http://localhost:8000 を開く
-- 初回起動時にAPI キーとAPI URLを設定
+3. **Access Application**:
+- Open http://localhost:8000 in your browser
+- Configure API Key and API URL on first launch
 
-## 🚀 クイックスタート（開発者向け）
+## 🚀 Quick Start (For Developers)
 
-### Docker使用（推奨）
+### Using Docker (Recommended)
 
-1. **リポジトリのクローン**:
+1. **Clone Repository**:
 ```bash
 git clone https://github.com/kotaokayama/DocTranslator.git
 cd DocTranslator
 ```
 
-2. **環境変数の設定**:
+2. **Set Environment Variables**:
 ```bash
 cp .env.example .env
-# .envを編集し、必要に応じてデバッグ設定などを変更
-# API KeyとAPI URLは初回起動時にUIから設定可能
+# Edit .env as needed
+# API Key and API URL can be configured through UI on first launch
 ```
 
-3. **アプリケーションの起動**:
+3. **Start Application**:
 ```bash
-# Dockerイメージのビルド
+# Build Docker image
 docker-compose -f docker-compose.dev.yml build
 
-# アプリケーションの起動
+# Start application
 docker-compose -f docker-compose.dev.yml up
 
-# または、makeコマンドを使用
+# Or using make command
 make start
 ```
 
-4. **アプリケーションへのアクセス**:
-- ブラウザで http://localhost:8000 を開く
-- 初回起動時にAPI キーとAPI URLを設定
+4. **Access Application**:
+- Open http://localhost:8000 in your browser
+- Configure API Key and API URL on first launch
 
-### ローカルインストール
+### Local Installation
 
-1. **クローンとセットアップ**:
+1. **Clone and Setup**:
 ```bash
 git clone https://github.com/kotaokayama/DocTranslator.git
 cd DocTranslator
 ```
 
-2. **仮想環境の作成**:
+2. **Create Virtual Environment**:
 ```bash
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 ```
 
-3. **依存関係のインストール**:
+3. **Install Dependencies**:
 ```bash
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
-4. **環境設定**:
+4. **Configure Environment**:
 ```bash
 cp .env.example .env
-# .envを編集（必要に応じて）
+# Edit .env as needed
 ```
 
-5. **サーバーの起動**:
+5. **Start Server**:
 ```bash
 uvicorn app.main:app --reload
 ```
 
-## 📁 プロジェクト構造
+## 📁 Project Structure
 
 ```
 DocTranslator/
-├── app/ # アプリケーションコード
-│ ├── core/ # コアビジネスロジック
-│ │ ├── init.py
-│ │ └── translator.py # 翻訳ロジック
-│ ├── static/ # 静的ファイル
-│ │ ├── css/
-│ │ ├── js/
-│ │ └── index.html
-│ └── utils/ # ユーティリティ関数
-├── docker/ # Docker設定
-│ ├── Dockerfile # 本番用Dockerfile
-│ └── Dockerfile.dev # 開発用Dockerfile
-├── docs/ # ドキュメント
-├── tests/ # テストファイル
-│ ├── init.py
-│ ├── conftest.py # テスト設定とフィクスチャ
-│ ├── integration/ # 統合テスト
-│ └── unit/ # ユニットテスト
-├── downloads/ # ダウンロードファイル
-├── uploads/ # アップロードファイル
-├── logs/ # ログファイル
-└── start.sh # 起動スクリプト
+├── app/                     # Application code
+│   ├── core/               # Core business logic
+│   │   ├── __init__.py
+│   │   └── translator.py   # Translation logic
+│   ├── static/             # Static files
+│   │   ├── css/
+│   │   ├── js/
+│   │   └── index.html
+│   └── utils/              # Utility functions
+├── docker/                 # Docker configuration
+│   ├── Dockerfile         # Production Dockerfile
+│   └── Dockerfile.dev     # Development Dockerfile
+├── docs/                   # Documentation
+├── tests/                 # Test files
+│   ├── __init__.py
+│   ├── conftest.py       # Test configuration and fixtures
+│   ├── integration/      # Integration tests
+│   └── unit/            # Unit tests
+├── downloads/             # Download files
+├── uploads/              # Upload files
+├── logs/                 # Log files
+└── start.sh              # Startup script
 ```
 
-## 🧪 テスト
+## 🧪 Testing
 
-### テストの実行
+### Running Tests
 ```bash
-# すべてのテストを実行
+# Run all tests
 make test
 
-# 特定のテストファイルを実行
+# Run specific test file
 pytest tests/unit/test_translator.py
 
-# カバレッジレポート付きで実行
+# Run with coverage report
 pytest --cov=app tests/ --cov-report=html
 
-# Dockerでテストを実行
+# Run tests in Docker
 docker-compose -f docker-compose.dev.yml exec document-translator pytest
 ```
 
-## 🔧 設定
+## 🔧 Configuration
 
-### 環境変数
+### Environment Variables
 
-`.env`ファイルで環境変数を管理します：
+Manage environment variables in `.env` file:
 
-- `GENAI_HUB_API_KEY`: API キー（UIから設定可能）
-- `GENAI_HUB_API_URL`: API URL（UIから設定可能）
-- `DEBUG`: デバッグモードの有効化（デフォルト: false）
-- `LOG_LEVEL`: ログレベル（デフォルト: INFO）
-- `MAX_FILE_SIZE`: 最大アップロードファイルサイズ（デフォルト: 100MB）
-- `UPLOAD_TIMEOUT`: アップロードタイムアウト（秒）（デフォルト: 300）
+- `GENAI_HUB_API_KEY`: API Key (configurable via UI)
+- `GENAI_HUB_API_URL`: API URL (configurable via UI)
+- `DEBUG`: Enable debug mode (default: false)
+- `LOG_LEVEL`: Logging level (default: INFO)
+- `MAX_FILE_SIZE`: Maximum upload file size (default: 100MB)
+- `UPLOAD_TIMEOUT`: Upload timeout in seconds (default: 300)
 
-### Docker設定
+### Docker Configuration
 
-開発環境:
+Development:
 ```bash
-# Dockerイメージのビルド
+# Build Docker image
 docker-compose -f docker-compose.dev.yml build
 
-# アプリケーションの起動
+# Start application
 docker-compose -f docker-compose.dev.yml up
 ```
 
-本番環境:
+Production:
 ```bash
-# Dockerイメージのビルド
+# Build Docker image
 docker-compose build
 
-# アプリケーションの起動
+# Start application
 docker-compose up
 ```
 
-## 🐛 トラブルシューティング
+## 🐛 Troubleshooting
 
-### 一般的な問題
+### Common Issues
 
-1. **API設定の問題**:
-- API KeyとAPI URLが正しく設定されているか確認
-- API Keyの権限を確認
-- API URLが正しいフォーマットであることを確認（例: https://api.anthropic.com/v1/chat/completions）
+1. **API Configuration Issues**:
+- Verify API Key and API URL are correctly set
+- Check API Key permissions
+- Verify API URL format (e.g., https://api.anthropic.com/v1/chat/completions)
 
-2. **PDF変換の失敗**:
-- LibreOfficeがインストールされていることを確認
-- ログで具体的なエラーを確認
-- ファイル権限を確認
+2. **PDF Conversion Failures**:
+- Verify LibreOffice is installed
+- Check logs for specific errors
+- Verify file permissions
 
-3. **Docker関連の問題**:
-- Docker Desktopが起動していることを確認
-- コンテナのログを確認
-- コンテナの再ビルドを試す
+3. **Docker-related Issues**:
+- Verify Docker Desktop is running
+- Check container logs
+- Try rebuilding container
 
-### デバッグ
+### Debugging
 
-1. **ログの表示**:
+1. **View Logs**:
 ```bash
-# Dockerログ
+# Docker logs
 docker-compose -f docker-compose.dev.yml logs -f
 
-# アプリケーションログ
+# Application logs
 tail -f logs/app.log
 ```
 
-2. **コンテナステータスの確認**:
+2. **Check Container Status**:
 ```bash
 docker-compose -f docker-compose.dev.yml ps
 ```
 
-## 📜 ライセンス
+## 📜 License
 
-このプロジェクトはMITライセンスの下で公開されています。詳細はLICENSEファイルを参照してください。
+This project is licensed under the MIT License. See the LICENSE file for details.
 
-## 👥 コントリビューション
+## 👥 Contributing
 
-1. **新しいブランチの作成**:
+1. **Create New Branch**:
 ```bash
-git checkout -b feature/新機能名
+git checkout -b feature/new-feature-name
 ```
 
-2. **変更の実施**:
-- コーディングスタイルに従う
-- 新機能のテストを追加
-- ドキュメントを更新
+2. **Make Changes**:
+- Follow coding style
+- Add tests for new features
+- Update documentation
 
-3. **変更のテスト**:
+3. **Test Changes**:
 ```bash
 make test
 make lint
 make format
 ```
 
-4. **プルリクエストの提出**:
-- 変更点を説明
-- 関連する課題を参照
-- チームメンバーにレビューを依頼
+4. **Submit Pull Request**:
+- Describe changes
+- Reference related issues
+- Request team member review
 
-## 📞 サポート
+## 📞 Support
 
-問題が発生した場合は、GitHubのIssueを作成してください。
+If you encounter any issues, please create a GitHub Issue.

@@ -1152,273 +1152,357 @@ def reimport_text_to_docx(
 
 
 #
-# PDF 処理関数
+# PDF 処理関数（translator.py.old.pyの処理フローに合わせて修正）
 #
 
 
-import PyPDF2
-import pdfplumber
-from docx import Document
-from docx.shared import Inches
-import pandas as pd
-
-def extract_text_from_pdf_direct(
-    pdf_path: str, progress_callback: Optional[Callable] = None
-) -> pd.DataFrame:
+def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
     """
-    PDFから直接テキストを抽出し、DataFrameとして返します。
+    PDFファイルをDOCXに変換します。
+    pdf2docxライブラリを優先し、失敗時はLibreOfficeを使用します。
+    
+    Args:
+        pdf_path: 入力PDFファイルのパス
+        docx_path: 出力DOCXファイルのパス
+        
+    Returns:
+        変換されたDOCXファイルのパス
     """
-    logger.info(f"PDFから直接テキストを抽出: {pdf_path}")
+    logger.info(f"PDFをDOCXに変換しています: {pdf_path} -> {docx_path}")
     
-    text_data = []
-    
+    # 方法1: pdf2docxライブラリを使用
     try:
-        # pdfplumberを使用してテキストを抽出
-        with pdfplumber.open(pdf_path) as pdf:
-            total_pages = len(pdf.pages)
-            logger.info(f"ページ数: {total_pages}")
+        from pdf2docx import Converter
+        
+        logger.info("pdf2docxを使用してPDFをDOCXに変換しています...")
+        
+        # PDFをDOCXに変換
+        cv = Converter(pdf_path)
+        cv.convert(docx_path)
+        cv.close()
+        
+        # 変換結果を確認
+        if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
+            logger.info(f"pdf2docxによるPDF→DOCX変換が完了しました: {docx_path}")
+            return docx_path
+        else:
+            logger.warning("pdf2docxでDOCXが作成されませんでした")
+            raise Exception("DOCXが作成されませんでした")
             
-            for page_num, page in enumerate(pdf.pages):
-                if progress_callback:
-                    try:
-                        progress_callback(page_num / total_pages * 0.3)
-                    except Exception as e:
-                        logger.warning(f"進捗コールバックエラー: {e}")
-                
-                # ページからテキストを抽出
-                text = page.extract_text()
-                if text and text.strip():
-                    # テキストを段落に分割
-                    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-                    
-                    for para_num, paragraph in enumerate(paragraphs):
-                        if paragraph:
-                            logger.debug(f"ページ {page_num+1}, 段落 {para_num+1}: {paragraph[:50]}...")
-                            
-                            text_data.append({
-                                "page_num": page_num,
-                                "para_num": para_num,
-                                "original_text": paragraph,
-                                "element_type": "pdf_paragraph",
-                            })
-    
+    except ImportError:
+        logger.warning("pdf2docxがインストールされていません。LibreOfficeを試行します。")
     except Exception as e:
-        logger.error(f"pdfplumberでの抽出に失敗: {e}")
-        
-        # PyPDF2を代替として使用
-        try:
-            logger.info("PyPDF2を使用して再試行...")
-            with open(pdf_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
-                total_pages = len(pdf_reader.pages)
-                
-                for page_num, page in enumerate(pdf_reader.pages):
-                    if progress_callback:
-                        try:
-                            progress_callback(page_num / total_pages * 0.3)
-                        except Exception as e:
-                            logger.warning(f"進捗コールバックエラー: {e}")
-                    
-                    text = page.extract_text()
-                    if text and text.strip():
-                        paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
-                        
-                        for para_num, paragraph in enumerate(paragraphs):
-                            if paragraph:
-                                text_data.append({
-                                    "page_num": page_num,
-                                    "para_num": para_num,
-                                    "original_text": paragraph,
-                                    "element_type": "pdf_paragraph",
-                                })
-        
-        except Exception as e2:
-            logger.error(f"PyPDF2での抽出も失敗: {e2}")
-            raise ValueError(f"PDFからのテキスト抽出に失敗しました: {str(e2)}")
+        logger.warning(f"pdf2docxによるPDF→DOCX変換に失敗しました: {e}. LibreOfficeを試行します。")
     
-    # データフレームに変換
-    df = pd.DataFrame(text_data)
-    
-    logger.info(f"抽出完了: {len(df)} 個のテキスト要素が見つかりました")
-    
-    if progress_callback:
-        try:
-            progress_callback(0.3)  # 抽出完了
-        except Exception as e:
-            logger.warning(f"進捗コールバックエラー: {e}")
-    
-    return df
-
-
-def create_docx_from_pdf_text(
-    df: pd.DataFrame,
-    output_path: str,
-    progress_callback: Optional[Callable] = None,
-    check_cancelled: Optional[Callable] = None,
-) -> None:
-    """
-    PDFから抽出したテキストを使用してDOCXファイルを作成します。
-    """
-    logger.info(f"PDFテキストからDOCXファイルを作成: {output_path}")
-    
+    # 方法2: LibreOfficeを使用してPDFをDOCXに変換
     try:
-        # 新しいWord文書を作成
-        doc = Document()
+        logger.info("LibreOfficeを使用してPDFをDOCXに変換しています...")
         
-        # ページごとにテキストを整理
-        pages = df.groupby('page_num')
-        total_pages = len(pages)
+        # LibreOfficeのパスを検索
+        libreoffice_paths = [
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
+            "/usr/local/bin/soffice",
+            "/usr/bin/soffice",
+            "libreoffice",
+            "soffice"
+        ]
         
-        for page_idx, (page_num, page_data) in enumerate(pages):
-            # 中止チェック
-            if check_cancelled and check_cancelled():
-                logger.info("DOCX作成が中止されました")
-                return
-            
-            if progress_callback:
-                try:
-                    progress = 0.8 + (page_idx / total_pages * 0.2)
-                    progress_callback(progress)
-                except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
-            
-            # ページヘッダーを追加
-            if page_num > 0:
-                doc.add_page_break()
-            
-            page_header = doc.add_heading(f'Page {page_num + 1}', level=2)
-            
-            # 段落を追加
-            for _, row in page_data.iterrows():
-                if 'translated_text' in row and pd.notna(row['translated_text']) and row['translated_text']:
-                    text_to_add = row['translated_text']
-                else:
-                    text_to_add = row['original_text']
-                
-                paragraph = doc.add_paragraph(text_to_add)
-        
-        # ファイルを保存
-        doc.save(output_path)
-        logger.info(f"DOCXファイルが作成されました: {output_path}")
-        
-        if progress_callback:
+        libreoffice_cmd = None
+        for path in libreoffice_paths:
             try:
-                progress_callback(1.0)  # 完了
-            except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
-    
-    except Exception as e:
-        logger.error(f"DOCX作成エラー: {e}")
-        raise
-
-def translate_pdf_direct(
-    input_path: str,
-    output_path: str,
-    api_key: str = None,
-    model: str = "claude-3-5-haiku",
-    source_lang: str = "en",
-    target_lang: str = "ja",
-    progress_callback: Optional[Callable] = None,
-    save_text_files_flag: bool = True,
-    ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,
-) -> tuple:
-    """
-    PDFファイルを直接処理して翻訳します
-    """
-    logger.info(f"PDF直接翻訳を開始します: {input_path} -> {output_path}")
-    
-    # 一時的なDOCXファイルのパスを生成
-    output_dir = os.path.dirname(output_path)
-    base_filename = os.path.splitext(os.path.basename(output_path))[0]
-    temp_docx = os.path.join(output_dir, f"{base_filename}_temp.docx")
-    
-    try:
-        # 1. PDFから直接テキスト抽出
-        df = extract_text_from_pdf_direct(input_path, progress_callback)
-
-        # 中止チェック
-        if check_cancelled and check_cancelled():
-            logger.info("翻訳が中止されました")
-            return None, None
-
-        # 抽出したテキストを保存
-        extracted_file = None
-        translated_file = None
-
-        if save_text_files_flag:
-            extracted_file, _ = save_text_files(df, output_dir, base_filename)
-
-        # 2. テキスト翻訳
-        df = translate_dataframe(
-            df,
-            api_key,
-            model,
-            source_lang,
-            target_lang,
-            progress_callback,
-            ai_instruction,
-            check_cancelled,
-        )
-
-        # 翻訳したテキストを保存
-        if save_text_files_flag and "translated_text" in df.columns:
-            _, translated_file = save_text_files(df, output_dir, base_filename)
-
-        # 3. 翻訳テキストからDOCXファイルを作成
-        logger.info(f"DOCXファイルを作成中: {temp_docx}")
-        create_docx_from_pdf_text(
-            df, temp_docx, progress_callback, check_cancelled
-        )
-
-        # DOCXファイルが正常に作成されたか確認
-        if not os.path.exists(temp_docx):
-            raise ValueError(f"DOCXファイルの作成に失敗しました: {temp_docx}")
+                if os.path.exists(path) or path in ["libreoffice", "soffice"]:
+                    # コマンドの存在確認
+                    result = subprocess.run([path, "--version"], 
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        libreoffice_cmd = path
+                        break
+            except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+                continue
         
-        docx_size = os.path.getsize(temp_docx)
-        logger.info(f"DOCXファイルが作成されました: {temp_docx} ({docx_size} bytes)")
-
-        # 4. DOCXからPDFに変換
-        try:
-            logger.info(f"DOCXをPDFに変換開始: {temp_docx} -> {output_path}")
-            convert_docx_to_pdf_with_libreoffice(temp_docx, output_path)
+        if not libreoffice_cmd:
+            raise FileNotFoundError("LibreOfficeが見つかりません")
+        
+        # LibreOfficeを使用してPDFをDOCXに変換
+        output_dir = os.path.dirname(docx_path)
+        cmd = [
+            libreoffice_cmd,
+            "--headless", "--convert-to", "docx",
+            "--outdir", output_dir, 
+            pdf_path
+        ]
+        
+        result = subprocess.run(cmd, check=True, timeout=120, 
+                              capture_output=True, text=True)
+        
+        # LibreOfficeは元のファイル名を使用するため、必要に応じてリネーム
+        generated_docx = os.path.join(
+            output_dir,
+            os.path.splitext(os.path.basename(pdf_path))[0] + ".docx"
+        )
+        
+        if generated_docx != docx_path and os.path.exists(generated_docx):
+            shutil.move(generated_docx, docx_path)
+        
+        if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
+            logger.info(f"LibreOfficeによるPDF→DOCX変換が完了しました: {docx_path}")
+            return docx_path
+        else:
+            logger.warning("LibreOfficeでDOCXが作成されませんでした")
+            raise Exception("DOCXが作成されませんでした")
             
-            # PDFファイルが正常に生成されたことを確認
-            if os.path.exists(output_path):
-                pdf_size = os.path.getsize(output_path)
-                if pdf_size > 0:
-                    logger.info(f"PDF変換が完了しました: {output_path} ({pdf_size} bytes)")
-                    # 一時DOCXファイルを削除
-                    if os.path.exists(temp_docx):
-                        os.remove(temp_docx)
-                        logger.debug(f"一時DOCXファイルを削除: {temp_docx}")
-                    return extracted_file, translated_file
-                else:
-                    logger.warning("生成されたPDFファイルが空です")
-                    raise ValueError("生成されたPDFファイルが空です")
-            else:
-                logger.warning("PDFファイルが生成されませんでした")
-                raise ValueError("PDFファイルが生成されませんでした")
-                
-        except Exception as e:
-            logger.error(f"PDF変換エラー: {e}")
-            logger.warning("PDF変換に失敗しました。DOCXファイルを提供します。")
-            
-            # DOCXファイルを最終出力として使用
-            docx_output_path = output_path.replace('.pdf', '.docx')
-            if temp_docx != docx_output_path:
-                shutil.move(temp_docx, docx_output_path)
-                logger.info(f"DOCXファイルを移動: {temp_docx} -> {docx_output_path}")
-            
-            return extracted_file, translated_file, docx_output_path
-
     except Exception as e:
-        logger.error(f"PDF処理エラー: {e}")
-        # 一時ファイルのクリーンアップ
-        if os.path.exists(temp_docx):
-            os.remove(temp_docx)
-        raise
+        logger.warning(f"LibreOfficeによるPDF→DOCX変換に失敗しました: {e}")
+        
+        # 方法3: PDFから直接テキストを抽出してDOCXを作成
+        try:
+            logger.info("PDFから直接テキストを抽出してDOCXを作成しています...")
+            
+            # PDFからテキストを抽出
+            text_content = []
+            
+            # pdfplumberを試す
+            try:
+                import pdfplumber
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page_num, page in enumerate(pdf.pages):
+                        text = page.extract_text()
+                        if text and text.strip():
+                            text_content.append(f"=== Page {page_num + 1} ===\n{text}\n")
+            except Exception as e:
+                logger.warning(f"pdfplumberでの抽出に失敗: {e}")
+                
+                # PyPDF2を試す
+                try:
+                    import PyPDF2
+                    with open(pdf_path, 'rb') as file:
+                        pdf_reader = PyPDF2.PdfReader(file)
+                        for page_num, page in enumerate(pdf_reader.pages):
+                            text = page.extract_text()
+                            if text and text.strip():
+                                text_content.append(f"=== Page {page_num + 1} ===\n{text}\n")
+                except Exception as e2:
+                    logger.error(f"PyPDF2での抽出も失敗: {e2}")
+                    raise ValueError(f"PDFからのテキスト抽出に失敗しました: {str(e2)}")
+            
+            if not text_content:
+                raise ValueError("PDFからテキストを抽出できませんでした")
+            
+            # DOCXファイルを作成
+            from docx import Document
+            doc = Document()
+            
+            for content in text_content:
+                paragraphs = content.split('\n')
+                for paragraph_text in paragraphs:
+                    if paragraph_text.strip():
+                        doc.add_paragraph(paragraph_text)
+            
+            doc.save(docx_path)
+            
+            if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
+                logger.info(f"テキスト抽出によるDOCX作成が完了しました: {docx_path}")
+                return docx_path
+            else:
+                raise ValueError("DOCXファイルの作成に失敗しました")
+                
+        except Exception as e2:
+            logger.error(f"テキスト抽出によるDOCX作成も失敗しました: {e2}")
+            raise ValueError(f"PDFからDOCXへの変換に失敗しました: {str(e2)}")
 
+
+def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
+    """
+    DOCXファイルをPDFに変換します。
+    複数の方法を試行してフォールバック処理を行います。
+    
+    Args:
+        docx_path: 入力DOCXファイルのパス
+        pdf_path: 出力PDFファイルのパス
+        
+    Returns:
+        変換されたPDFファイルのパス
+    """
+    import sys
+    import threading
+    import time
+    
+    logger.info(f"DOCXをPDFに変換しています: {docx_path} -> {pdf_path}")
+    
+    # 方法1: docx2pdfを試す
+    try:
+        from docx2pdf import convert
+        
+        logger.info("docx2pdfを使用してDOCXをPDFに変換しています...")
+        
+        def convert_with_timeout():
+            try:
+                convert(docx_path, pdf_path)
+                return True
+            except Exception as e:
+                logger.error(f"docx2pdf変換エラー: {e}")
+                return False
+        
+        # 別スレッドで変換を実行（タイムアウト付き）
+        thread = threading.Thread(target=convert_with_timeout)
+        thread.daemon = True
+        thread.start()
+        
+        # 最大60秒待機
+        timeout = 60
+        start_time = time.time()
+        while thread.is_alive() and time.time() - start_time < timeout:
+            time.sleep(1)
+        
+        if thread.is_alive():
+            logger.warning(f"docx2pdfがタイムアウトしました（{timeout}秒）")
+            raise TimeoutError(f"docx2pdfがタイムアウトしました（{timeout}秒）")
+        
+        # 変換結果を確認
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info(f"docx2pdfによるDOCX変換が完了しました: {pdf_path}")
+            return pdf_path
+        else:
+            logger.warning("docx2pdfでPDFが作成されませんでした")
+            raise Exception("PDFが作成されませんでした")
+            
+    except ImportError:
+        logger.warning("docx2pdfがインストールされていません。代替方法を試みます。")
+    except Exception as e:
+        logger.warning(f"docx2pdfによる変換に失敗しました: {e}. 代替方法を試みます。")
+    
+    # 方法2: LibreOfficeを試す
+    try:
+        logger.info("LibreOfficeを使用してDOCXをPDFに変換しています...")
+        
+        # LibreOfficeのパスを検索
+        libreoffice_paths = [
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
+            "/usr/local/bin/soffice",
+            "/usr/bin/soffice",
+            "libreoffice",
+            "soffice"
+        ]
+        
+        libreoffice_cmd = None
+        for path in libreoffice_paths:
+            try:
+                if os.path.exists(path) or path in ["libreoffice", "soffice"]:
+                    # コマンドの存在確認
+                    result = subprocess.run([path, "--version"], 
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        libreoffice_cmd = path
+                        break
+            except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+                continue
+        
+        if not libreoffice_cmd:
+            raise FileNotFoundError("LibreOfficeが見つかりません")
+        
+        # LibreOfficeを使用してDOCXをPDFに変換
+        cmd = [
+            libreoffice_cmd,
+            "--headless", "--convert-to", "pdf",
+            "--outdir", os.path.dirname(pdf_path), 
+            docx_path
+        ]
+        
+        result = subprocess.run(cmd, check=True, timeout=120, 
+                              capture_output=True, text=True)
+        
+        # LibreOfficeは元のファイル名を使用するため、必要に応じてリネーム
+        generated_pdf = os.path.join(
+            os.path.dirname(pdf_path),
+            os.path.splitext(os.path.basename(docx_path))[0] + ".pdf"
+        )
+        
+        if generated_pdf != pdf_path and os.path.exists(generated_pdf):
+            shutil.move(generated_pdf, pdf_path)
+        
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info(f"LibreOfficeによるDOCX変換が完了しました: {pdf_path}")
+            return pdf_path
+        else:
+            logger.warning("LibreOfficeでPDFが作成されませんでした")
+            raise Exception("PDFが作成されませんでした")
+            
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        logger.warning(f"LibreOfficeによる変換に失敗しました: {e}")
+    
+    # 方法3: reportlabを使用した簡易PDF生成
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from docx import Document
+        
+        logger.info("reportlabを使用して簡易PDFを生成しています...")
+        
+        # DOCXからテキストを抽出
+        doc = Document(docx_path)
+        text_content = []
+        
+        for para in doc.paragraphs:
+            if para.text.strip():
+                text_content.append(para.text)
+        
+        # 表からもテキストを抽出
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = []
+                for cell in row.cells:
+                    if cell.text.strip():
+                        row_text.append(cell.text.strip())
+                if row_text:
+                    text_content.append(" | ".join(row_text))
+        
+        # PDFを生成
+        pdf_doc = SimpleDocTemplate(pdf_path, pagesize=letter)
+        styles = getSampleStyleSheet()
+        flowables = []
+        
+        for text in text_content:
+            try:
+                # 問題のある文字を除去
+                safe_text = ''.join(c for c in text if ord(c) < 65536)
+                p = Paragraph(safe_text, styles["Normal"])
+                flowables.append(p)
+                flowables.append(Spacer(1, 12))
+            except Exception as e:
+                logger.warning(f"段落の作成に失敗しました: {e}")
+                continue
+        
+        pdf_doc.build(flowables)
+        
+        if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
+            logger.info(f"reportlabによる簡易PDF生成が完了しました: {pdf_path}")
+            logger.warning("注意: 簡易PDFはフォーマットが制限されています")
+            return pdf_path
+        else:
+            logger.warning("reportlabでPDFが作成されませんでした")
+            raise Exception("PDFが作成されませんでした")
+            
+    except ImportError:
+        logger.warning("reportlabがインストールされていません")
+    except Exception as e:
+        logger.warning(f"reportlabによる変換に失敗しました: {e}")
+    
+    # すべての方法が失敗した場合
+    logger.error("すべてのPDF変換方法が失敗しました")
+    
+    # 最終手段: DOCXファイルをそのまま返す
+    docx_copy_path = pdf_path.replace(".pdf", ".docx")
+    shutil.copy(docx_path, docx_copy_path)
+    logger.warning(f"PDF変換に失敗したため、DOCXファイルをコピーしました: {docx_copy_path}")
+    
+    # エラーメッセージを含むテキストファイルを作成
+    error_txt_path = pdf_path.replace(".pdf", "_error.txt")
+    with open(error_txt_path, "w", encoding="utf-8") as f:
+        f.write(f"PDF変換に失敗しました。DOCXファイルが代わりに保存されています: {docx_copy_path}\n")
+        f.write("すべての変換方法（docx2pdf, LibreOffice, reportlab）が失敗しました。\n")
+    
+    return docx_copy_path
 
 
 def translate_pdf(
@@ -1433,149 +1517,114 @@ def translate_pdf(
     ai_instruction: str = "",
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
-    """PDFファイルを翻訳します（直接処理を優先、LibreOfficeは代替手段）"""
+    """
+    PDFファイルを翻訳します。
+    translator.py.old.pyの処理フローに従います：
+    1. convert_pdf_to_docx()でPDFをDOCXに変換
+    2. translate_docx()でDOCX翻訳を実行
+    3. convert_docx_to_pdf()で翻訳済みDOCXをPDFに変換
+    
+    Args:
+        input_path: 入力PDFファイルのパス
+        output_path: 出力PDFファイルのパス
+        api_key: GenAI Hub API キー
+        model: 使用するモデル名
+        source_lang: 元の言語コード
+        target_lang: 翻訳先の言語コード
+        progress_callback: 進捗を報告するコールバック関数
+        save_text_files_flag: テキストファイルを保存するかどうか
+        ai_instruction: AIへの補足指示
+        check_cancelled: 中止状態をチェックする関数
+        
+    Returns:
+        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+    """
     logger.info(f"PDF翻訳を開始します: {input_path} -> {output_path}")
-
+    
+    if ai_instruction:
+        logger.info(f"AIへの補足指示: {ai_instruction}")
+    
+    # 一時ファイルのパスを生成
+    temp_dir = os.path.dirname(output_path)
+    base_name = os.path.splitext(os.path.basename(input_path))[0]
+    temp_docx_input = os.path.join(temp_dir, f"{base_name}_temp_input.docx")
+    temp_docx_output = os.path.join(temp_dir, f"{base_name}_temp_output.docx")
+    
     try:
-        # まず直接処理を試行
-        logger.info("PDFから直接テキストを抽出して翻訳を試行します...")
-        return translate_pdf_direct(
-            input_path,
-            output_path,
+        # 中止チェック
+        if check_cancelled and check_cancelled():
+            logger.info("翻訳が中止されました")
+            return None, None
+        
+        # 進捗状況の更新
+        if progress_callback:
+            progress_callback(0.05)
+            
+        # 1. PDFをDOCXに変換
+        logger.info("PDFをDOCXに変換しています...")
+        convert_pdf_to_docx(input_path, temp_docx_input)
+        
+        # 中止チェック
+        if check_cancelled and check_cancelled():
+            logger.info("翻訳が中止されました")
+            return None, None
+        
+        if progress_callback:
+            progress_callback(0.15)
+        
+        # 2. DOCXを翻訳
+        logger.info("DOCXを翻訳しています...")
+        extracted_file, translated_file = translate_docx(
+            temp_docx_input,
+            temp_docx_output,
             api_key,
             model,
             source_lang,
             target_lang,
-            progress_callback,
+            # 進捗コールバックを調整して15%〜85%の範囲にする
+            lambda p: progress_callback(0.15 + p * 0.7) if progress_callback else None,
             save_text_files_flag,
             ai_instruction,
-            check_cancelled,
+            check_cancelled
         )
-    
-    except Exception as direct_error:
-        logger.warning(f"直接処理に失敗しました: {direct_error}")
-        logger.info("LibreOfficeを使用した変換を試行します...")
         
-        try:
-            # 一時ファイル用のディレクトリ
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # 中止チェック
-                if check_cancelled and check_cancelled():
-                    logger.info("翻訳が中止されました")
-                    return None, None
-
-                # 進捗更新
-                if progress_callback:
-                    progress_callback(0.1)
-
-                # 1. PDF → DOCX変換（LibreOfficeを使用）
-                temp_docx = os.path.join(temp_dir, "temp.docx")
-                logger.info(f"PDFをDOCXに変換: {input_path} -> {temp_docx}")
-                
-                # LibreOfficeを使用してPDFをDOCXに変換
-                convert_pdf_to_docx_with_libreoffice(input_path, temp_docx)
-
-                # 中止チェック
-                if check_cancelled and check_cancelled():
-                    logger.info("翻訳が中止されました")
-                    return None, None
-
-                # 進捗更新
-                if progress_callback:
-                    progress_callback(0.2)
-
-                # 2. DOCXを翻訳
-                temp_translated_docx = os.path.join(temp_dir, "translated.docx")
-                extracted_file_temp, translated_file_temp = translate_docx(
-                    temp_docx,
-                    temp_translated_docx,
-                    api_key,
-                    model,
-                    source_lang,
-                    target_lang,
-                    lambda p: (
-                        progress_callback(0.2 + p * 0.6) if progress_callback else None
-                    ),
-                    save_text_files_flag,
-                    ai_instruction,
-                    check_cancelled,
-                )
-
-                # 中止チェック
-                if check_cancelled and check_cancelled():
-                    logger.info("翻訳が中止されました")
-                    return None, None
-
-                # 一時ファイルを出力ディレクトリにコピー
-                output_dir = os.path.dirname(output_path)
-                base_filename = os.path.splitext(os.path.basename(output_path))[0]
-
-                extracted_file = None
-                translated_file = None
-
-                try:
-                    if extracted_file_temp and os.path.exists(extracted_file_temp):
-                        extracted_file = os.path.join(
-                            output_dir, f"{base_filename}_extracted.txt"
-                        )
-                        shutil.copy2(extracted_file_temp, extracted_file)
-                        logger.info(
-                            f"抽出テキストファイルをコピーしました: {extracted_file}"
-                        )
-
-                    if translated_file_temp and os.path.exists(translated_file_temp):
-                        translated_file = os.path.join(
-                            output_dir, f"{base_filename}_translated.txt"
-                        )
-                        shutil.copy2(translated_file_temp, translated_file)
-                        logger.info(
-                            f"翻訳テキストファイルをコピーしました: {translated_file}"
-                        )
-                except Exception as e:
-                    logger.error(f"ファイルコピー中にエラーが発生しました: {e}")
-                    # コピーに失敗しても処理は続行
-
-                # 中止チェック
-                if check_cancelled and check_cancelled():
-                    logger.info("翻訳が中止されました")
-                    return extracted_file, translated_file
-
-                # 3. DOCX → PDF変換（LibreOfficeを使用）
-                logger.info(
-                    f"翻訳済みDOCXをPDFに変換: {temp_translated_docx} -> {output_path}"
-                )
-                convert_docx_to_pdf_with_libreoffice(temp_translated_docx, output_path)
-
-                # 進捗更新
-                if progress_callback:
-                    progress_callback(1.0)
-
-                logger.info(f"PDF翻訳が完了しました: {output_path}")
-                return extracted_file, translated_file
-
-        except Exception as libreoffice_error:
-            logger.error(f"LibreOffice変換も失敗しました: {libreoffice_error}")
+        # 中止チェック
+        if check_cancelled and check_cancelled():
+            logger.info("翻訳が中止されました")
+            return extracted_file, translated_file
+        
+        # 3. 翻訳済みDOCXをPDFに変換
+        logger.info("翻訳済みDOCXをPDFに変換しています...")
+        final_output = convert_docx_to_pdf(temp_docx_output, output_path)
+        
+        if progress_callback:
+            progress_callback(1.0)
             
-            # 最後の手段として、DOCXファイルのみ提供
-            try:
-                logger.info("DOCXファイルのみ提供します...")
-                docx_output_path = output_path.replace('.pdf', '.docx')
-                
-                return translate_pdf_direct(
-                    input_path,
-                    docx_output_path,
-                    api_key,
-                    model,
-                    source_lang,
-                    target_lang,
-                    progress_callback,
-                    save_text_files_flag,
-                    ai_instruction,
-                    check_cancelled,
-                )
-            except Exception as final_error:
-                logger.error(f"すべての変換方法が失敗しました: {final_error}")
-                raise ValueError(f"PDF翻訳に失敗しました: {str(final_error)}")
+        # 最終出力がDOCXファイルの場合（PDF変換に失敗した場合）
+        if final_output.endswith('.docx'):
+            logger.warning("PDF変換に失敗しました。DOCXファイルが提供されます。")
+            # DOCXファイルを適切な場所に移動
+            if final_output != output_path.replace('.pdf', '.docx'):
+                shutil.move(final_output, output_path.replace('.pdf', '.docx'))
+        
+        logger.info(f"PDF翻訳が完了しました: {output_path}")
+        return extracted_file, translated_file
+        
+    except Exception as e:
+        logger.error(f"PDF翻訳エラー: {e}")
+        raise
+    finally:
+        # 一時ファイルの削除
+        try:
+            if os.path.exists(temp_docx_input):
+                os.remove(temp_docx_input)
+                logger.debug(f"一時ファイルを削除しました: {temp_docx_input}")
+            if os.path.exists(temp_docx_output):
+                os.remove(temp_docx_output)
+                logger.debug(f"一時ファイルを削除しました: {temp_docx_output}")
+        except Exception as e:
+            logger.warning(f"一時ファイルの削除に失敗しました: {e}")
+
 
 def translate_xlsx(
     input_path: str,
@@ -1591,6 +1640,21 @@ def translate_xlsx(
 ) -> tuple:
     """
     XLSXファイルを翻訳します。
+
+    Args:
+        input_path: 入力Excelファイルのパス
+        output_path: 出力Excelファイルのパス
+        api_key: GenAI Hub API キー
+        model: 使用するモデル名
+        source_lang: 元の言語コード
+        target_lang: 翻訳先の言語コード
+        progress_callback: 進捗を報告するコールバック関数
+        save_text_files_flag: テキストファイルを保存するかどうか
+        ai_instruction: AIへの補足指示
+        check_cancelled: 中止状態をチェックする関数
+
+    Returns:
+        (抽出テキストファイルパス, 翻訳テキストファイルパス)
     """
     logger.info(f"Excel翻訳を開始: {input_path} -> {output_path}")
 
@@ -1646,7 +1710,7 @@ def translate_xlsx(
             check_cancelled
         )
 
-        if save_text_files_flag:
+        if save_text_files_flag and 'translated_text' in text_df.columns:
             _, translated_file = save_text_files(text_df, output_dir, base_filename)
 
         # 翻訳結果をExcelに反映
@@ -1655,8 +1719,9 @@ def translate_xlsx(
             if check_cancelled and check_cancelled():
                 return extracted_file, translated_file
                 
-            sheet = translated_excel[row['sheet_name']]
-            sheet.at[row['row'], row['column']] = row['translated_text']
+            if 'translated_text' in row and pd.notna(row['translated_text']):
+                sheet = translated_excel[row['sheet_name']]
+                sheet.at[row['row'], row['column']] = row['translated_text']
 
         # 翻訳したExcelファイルを保存
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
@@ -1902,358 +1967,6 @@ def translate_docx(
     return extracted_file, translated_file
 
 
-def convert_pdf_to_docx_with_libreoffice(input_pdf: str, output_docx: str) -> None:
-    """
-    LibreOfficeを使用してPDFファイルをDOCXに変換します。
-    """
-    try:
-        # 出力ディレクトリを取得
-        output_dir = os.path.dirname(output_docx)
-        
-        # 出力ディレクトリの存在確認と権限設定
-        os.makedirs(output_dir, exist_ok=True)
-        os.chmod(output_dir, 0o777)
-
-        # 入力ファイルの絶対パスを取得
-        input_pdf_abs = os.path.abspath(input_pdf)
-        
-        # 一時作業ディレクトリを作成
-        work_dir = os.path.join(output_dir, "work")
-        os.makedirs(work_dir, exist_ok=True)
-        os.chmod(work_dir, 0o777)
-
-        # LibreOfficeコマンドを構築（より詳細なオプション）
-        cmd = [
-            "libreoffice",
-            "--headless",
-            "--invisible",
-            "--nodefault",
-            "--nolockcheck",
-            "--nologo",
-            "--norestore",
-            "--convert-to", "docx",
-            "--outdir", output_dir,
-            input_pdf_abs
-        ]
-
-        logger.debug(f"LibreOfficeコマンド: {' '.join(cmd)}")
-
-        # 環境変数を設定
-        env = os.environ.copy()
-        env.update({
-            "HOME": work_dir,
-            "TMPDIR": work_dir,
-            "LOGNAME": "libreoffice",
-            "USER": "libreoffice",
-            "USERNAME": "libreoffice",
-            "DISPLAY": ":99",  # 仮想ディスプレイ
-        })
-
-        # コマンドを実行し、結果を取得
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=120,  # タイムアウトを延長
-            env=env,
-            cwd=work_dir
-        )
-
-        # 実行結果のログ出力
-        logger.debug(f"LibreOffice return code: {result.returncode}")
-        if result.stdout:
-            logger.debug(f"LibreOffice stdout: {result.stdout}")
-        if result.stderr:
-            logger.debug(f"LibreOffice stderr: {result.stderr}")
-
-        # 生成されたDOCXファイル名
-        generated_docx = os.path.join(
-            output_dir, os.path.splitext(os.path.basename(input_pdf))[0] + ".docx"
-        )
-
-        # ファイルの存在確認
-        if os.path.exists(generated_docx):
-            os.chmod(generated_docx, 0o666)
-            logger.info(f"DOCX file generated successfully: {generated_docx}")
-        else:
-            # 詳細なデバッグ情報
-            logger.error(f"Output directory contents: {os.listdir(output_dir)}")
-            if os.path.exists(work_dir):
-                logger.error(f"Work directory contents: {os.listdir(work_dir)}")
-            
-            # 代替方法を試行（Writer形式で変換）
-            logger.info("Trying alternative conversion method...")
-            alt_cmd = [
-                "libreoffice",
-                "--headless",
-                "--convert-to", "odt",
-                "--outdir", output_dir,
-                input_pdf_abs
-            ]
-            
-            alt_result = subprocess.run(
-                alt_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=60,
-                env=env,
-                cwd=work_dir
-            )
-            
-            odt_file = os.path.join(
-                output_dir, os.path.splitext(os.path.basename(input_pdf))[0] + ".odt"
-            )
-            
-            if os.path.exists(odt_file):
-                # ODTからDOCXに変換
-                docx_cmd = [
-                    "libreoffice",
-                    "--headless",
-                    "--convert-to", "docx",
-                    "--outdir", output_dir,
-                    odt_file
-                ]
-                
-                subprocess.run(docx_cmd, env=env, cwd=work_dir, timeout=60)
-                
-                # ODTファイルを削除
-                os.remove(odt_file)
-            
-            if not os.path.exists(generated_docx):
-                raise ValueError(f"DOCX file was not generated: {generated_docx}")
-
-        # 指定された出力パスに移動（必要な場合）
-        if generated_docx != output_docx and os.path.exists(generated_docx):
-            shutil.move(generated_docx, output_docx)
-            os.chmod(output_docx, 0o666)
-
-        logger.info(f"LibreOfficeによるPDF→DOCX変換が完了しました: {output_docx}")
-
-    except subprocess.TimeoutExpired:
-        logger.error("LibreOffice conversion timed out")
-        raise ValueError("PDF変換がタイムアウトしました")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"LibreOfficeによる変換エラー: {e}")
-        logger.error(f"標準出力: {e.stdout}")
-        logger.error(f"標準エラー: {e.stderr}")
-        raise ValueError(f"PDFからDOCXへの変換に失敗しました: {str(e)}")
-    except Exception as e:
-        logger.error(f"PDF→DOCX変換エラー: {e}")
-        raise ValueError(f"PDFからDOCXへの変換に失敗しました: {str(e)}")
-    finally:
-        # 一時作業ディレクトリを削除
-        try:
-            if 'work_dir' in locals() and os.path.exists(work_dir):
-                shutil.rmtree(work_dir, ignore_errors=True)
-        except Exception as e:
-            logger.warning(f"一時ディレクトリの削除に失敗しました: {e}")
-
-def convert_pdf_to_text_fallback(input_pdf: str) -> str:
-    """
-    PDFからテキストを直接抽出する代替手段
-    """
-    try:
-        import PyPDF2
-        
-        with open(input_pdf, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-        
-        return text
-    except ImportError:
-        logger.warning("PyPDF2 is not installed. Cannot extract text from PDF.")
-        return ""
-    except Exception as e:
-        logger.error(f"PDF text extraction failed: {e}")
-        return ""
-
-def convert_docx_to_pdf_with_libreoffice(input_docx: str, output_pdf: str) -> None:
-    """
-    LibreOfficeを使用してDOCXファイルをPDFに変換します。
-    """
-    import tempfile
-    import time
-    import signal
-    
-    try:
-        # 入力ファイルの存在確認
-        if not os.path.exists(input_docx):
-            raise ValueError(f"Input DOCX file not found: {input_docx}")
-        
-        input_size = os.path.getsize(input_docx)
-        logger.info(f"PDF変換開始 - 入力ファイル: {input_docx} ({input_size} bytes)")
-        
-        # 出力ディレクトリの準備
-        output_dir = os.path.dirname(output_pdf)
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # 一時作業ディレクトリを作成
-        with tempfile.TemporaryDirectory(prefix="libreoffice_", dir="/tmp") as temp_dir:
-            logger.info(f"一時ディレクトリ: {temp_dir}")
-            
-            # 入力ファイルを一時ディレクトリにコピー
-            temp_input = os.path.join(temp_dir, "input.docx")
-            shutil.copy2(input_docx, temp_input)
-            logger.info(f"入力ファイルをコピー: {temp_input}")
-            
-            # LibreOffice用の環境変数
-            env = os.environ.copy()
-            env.update({
-                "HOME": temp_dir,
-                "TMPDIR": temp_dir,
-                "USER": "root",
-                "DISPLAY": ":99",
-                "SAL_USE_VCLPLUGIN": "svp",
-                "LANG": "C.UTF-8",
-                "LC_ALL": "C.UTF-8",
-            })
-            
-            # 複数の変換方法を試行
-            conversion_attempts = [
-                {
-                    "name": "Standard PDF conversion",
-                    "cmd": [
-                        "libreoffice",
-                        "--headless",
-                        "--invisible",
-                        "--nodefault",
-                        "--nolockcheck",
-                        "--nologo",
-                        "--norestore",
-                        "--convert-to", "pdf",
-                        "--outdir", temp_dir,
-                        temp_input
-                    ]
-                },
-                {
-                    "name": "Writer PDF Export",
-                    "cmd": [
-                        "libreoffice",
-                        "--headless",
-                        "--invisible",
-                        "--nodefault",
-                        "--nolockcheck",
-                        "--nologo",
-                        "--norestore",
-                        "--convert-to", "pdf:writer_pdf_Export",
-                        "--outdir", temp_dir,
-                        temp_input
-                    ]
-                },
-                {
-                    "name": "Alternative soffice command",
-                    "cmd": [
-                        "soffice",
-                        "--headless",
-                        "--invisible",
-                        "--nodefault",
-                        "--nolockcheck",
-                        "--nologo",
-                        "--norestore",
-                        "--convert-to", "pdf",
-                        "--outdir", temp_dir,
-                        temp_input
-                    ]
-                },
-                {
-                    "name": "Simple conversion",
-                    "cmd": [
-                        "libreoffice",
-                        "--convert-to", "pdf",
-                        "--outdir", temp_dir,
-                        temp_input
-                    ]
-                }
-            ]
-            
-            success = False
-            last_error = None
-            
-            for attempt in conversion_attempts:
-                try:
-                    logger.info(f"試行中: {attempt['name']}")
-                    logger.debug(f"コマンド: {' '.join(attempt['cmd'])}")
-                    
-                    # プロセス実行
-                    process = subprocess.Popen(
-                        attempt['cmd'],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        env=env,
-                        cwd=temp_dir,
-                        preexec_fn=os.setsid  # プロセスグループを作成
-                    )
-                    
-                    try:
-                        # タイムアウト付きで待機
-                        stdout, stderr = process.communicate(timeout=180)
-                        return_code = process.returncode
-                        
-                        logger.debug(f"Return code: {return_code}")
-                        if stdout:
-                            logger.debug(f"Stdout: {stdout}")
-                        if stderr:
-                            logger.debug(f"Stderr: {stderr}")
-                        
-                        # 出力ファイルをチェック
-                        temp_pdf = os.path.join(temp_dir, "input.pdf")
-                        
-                        # 少し待機してファイルシステムの同期を待つ
-                        time.sleep(1)
-                        
-                        if os.path.exists(temp_pdf):
-                            pdf_size = os.path.getsize(temp_pdf)
-                            logger.info(f"PDFファイル生成: {temp_pdf} ({pdf_size} bytes)")
-                            
-                            if pdf_size > 100:  # 最小サイズチェック（100バイト以上）
-                                # 最終出力先にコピー
-                                shutil.copy2(temp_pdf, output_pdf)
-                                os.chmod(output_pdf, 0o666)
-                                
-                                final_size = os.path.getsize(output_pdf)
-                                logger.info(f"PDF変換完了: {output_pdf} ({final_size} bytes)")
-                                success = True
-                                break
-                            else:
-                                logger.warning(f"生成されたPDFファイルが小さすぎます: {pdf_size} bytes")
-                                if os.path.exists(temp_pdf):
-                                    os.remove(temp_pdf)
-                        else:
-                            logger.warning(f"PDFファイルが生成されませんでした: {temp_pdf}")
-                            logger.debug(f"一時ディレクトリの内容: {os.listdir(temp_dir)}")
-                    
-                    except subprocess.TimeoutExpired:
-                        logger.warning(f"{attempt['name']} がタイムアウトしました")
-                        # プロセスグループ全体を終了
-                        try:
-                            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                            time.sleep(2)
-                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                        except:
-                            pass
-                        process.wait()
-                        continue
-                        
-                except Exception as e:
-                    logger.warning(f"{attempt['name']} でエラー: {e}")
-                    last_error = e
-                    continue
-            
-            if not success:
-                error_msg = f"すべての変換方法が失敗しました。最後のエラー: {last_error}"
-                logger.error(error_msg)
-                raise ValueError(error_msg)
-                
-    except Exception as e:
-        logger.error(f"PDF変換エラー: {e}")
-        raise ValueError(f"DOCXからPDFへの変換に失敗しました: {str(e)}")
-
-
 def check_libreoffice() -> Tuple[bool, str]:
     """
     LibreOfficeの可用性をチェックします。
@@ -2406,7 +2119,6 @@ def translate_document(
         raise
 
 
-
 # テスト用コード
 if __name__ == "__main__":
     # API キーを環境変数から取得
@@ -2434,93 +2146,8 @@ __all__ = [
     "translate_pptx",
     "translate_docx",
     "translate_pdf",
+    "translate_xlsx",
     "translate_document",
     "load_translation_cache",
     "save_translation_cache",
 ]
-
-def translate_xlsx(
-    input_path: str,
-    output_path: str,
-    api_key: str = None,
-    model: str = "claude-3-5-haiku",
-    source_lang: str = "en",
-    target_lang: str = "ja",
-    progress_callback: Optional[Callable] = None,
-    save_text_files_flag: bool = True,
-    ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,
-) -> tuple:
-    """
-    XLSXファイルを翻訳します。
-
-    Args:
-        input_path: 入力Excelファイルのパス
-        output_path: 出力Excelファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
-
-    Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
-    """
-    logger.info(f"Excel翻訳を開始: {input_path} -> {output_path}")
-
-    try:
-        # 進捗表示
-        if progress_callback:
-            progress_callback(0.1)
-
-        # Excelファイルを読み込み
-        excel = pd.read_excel(input_path, sheet_name=None, engine="openpyxl")
-        total_sheets = len(excel)
-        translated_excel = {}
-
-        # 翻訳関数を定義
-        def translate_text(text):
-            if not isinstance(text, str) or not text.strip():
-                return text
-            return translate_text_with_cache(
-                text,
-                api_key,
-                model,
-                source_lang,
-                target_lang,
-                ai_instruction
-            )
-
-        # 各シートを処理
-        for sheet_idx, (sheet_name, df) in enumerate(excel.items()):
-            if check_cancelled and check_cancelled():
-                return None, None
-
-            # 進捗更新
-            if progress_callback:
-                progress = 0.1 + (sheet_idx / total_sheets * 0.8)
-                progress_callback(progress)
-
-            # 文字列のみを翻訳
-            df_translated = df.applymap(translate_text)
-            translated_excel[sheet_name] = df_translated
-
-        # 翻訳結果を保存
-        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-            for sheet_name, df in translated_excel.items():
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-        if progress_callback:
-            progress_callback(1.0)
-
-        logger.info(f"Excel翻訳が完了しました: {output_path}")
-        
-        # テキストファイルのパスを返す（この例では実装していない）
-        return None, None
-
-    except Exception as e:
-        logger.error(f"Excel翻訳エラー: {e}")
-        raise
