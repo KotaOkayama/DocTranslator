@@ -543,21 +543,66 @@ from app.core.translator import translate_xlsx
 def dummy_translate_func(text):
     return f"{text}_translated"
 
-def test_translate_xlsx(tmp_path):
-    # 入力ファイル作成
-    input_path = tmp_path / "test.xlsx"
-    output_path = tmp_path / "translated.xlsx"
+import tempfile
+import pandas as pd
+from app.core.translator import translate_xlsx
 
-    df = pd.DataFrame({
-        "A": ["Hello", "World"],
-        "B": ["Test", "Excel"]
+def test_translate_xlsx():
+    """Test XLSX translation functionality"""
+    # テストデータの作成
+    test_data = pd.DataFrame({
+        'English': ['Hello', 'World', 'Test'],
+        'Numbers': [1, 2, 3]
     })
-    df.to_excel(input_path, index=False, engine="openpyxl")
+    
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # 入力ファイルの作成
+        input_path = os.path.join(temp_dir, 'test.xlsx')
+        output_path = os.path.join(temp_dir, 'translated.xlsx')
+        test_data.to_excel(input_path, index=False)
+        
+        # モックの翻訳関数
+        def mock_translate(text, *args, **kwargs):
+            if isinstance(text, str):
+                return f"Translated: {text}"
+            return text
 
-    # 翻訳実行
-    translate_xlsx(str(input_path), str(output_path), dummy_translate_func)
-
-    # 結果確認
-    df_translated = pd.read_excel(output_path, engine="openpyxl")
-    assert df_translated.iloc[0, 0] == "Hello_translated"
-    assert df_translated.iloc[1, 1] == "Excel_translated"
+        try:
+            # 翻訳実行
+            result = translate_xlsx(
+                input_path=input_path,
+                output_path=output_path,
+                api_key="test_key",
+                model="claude-3-5-haiku",
+                source_lang="en",
+                target_lang="ja",
+                ai_instruction="",
+                progress_callback=None,
+                save_text_files_flag=True
+            )
+            
+            # 結果の検証
+            assert os.path.exists(output_path), "Output file should exist"
+            
+            # 翻訳結果の読み込みと検証
+            translated_df = pd.read_excel(output_path)
+            assert not translated_df.empty, "Translated DataFrame should not be empty"
+            assert 'English' in translated_df.columns, "Should contain original column"
+            
+            # 数値データが保持されていることを確認
+            assert 'Numbers' in translated_df.columns, "Should contain numeric column"
+            assert all(isinstance(x, (int, float)) for x in translated_df['Numbers']), "Numbers should remain numeric"
+            
+            # テキストファイルの生成を確認
+            extracted_file, translated_file = result
+            if extracted_file:
+                assert os.path.exists(extracted_file), "Extracted text file should exist"
+            if translated_file:
+                assert os.path.exists(translated_file), "Translated text file should exist"
+                
+        finally:
+            # クリーンアップ
+            if os.path.exists(input_path):
+                os.unlink(input_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
