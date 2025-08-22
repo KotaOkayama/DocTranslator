@@ -44,6 +44,251 @@ function initializeWebSocket() {
     };
 }
 
+
+// モデル読み込み機能
+async function loadModels() {
+    try {
+        console.log('Loading models from API...');
+        
+        const response = await fetch('/api/models');
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${data.detail || 'Unknown error'}`);
+        }
+        
+        const modelSelect = document.getElementById('model');
+        if (!modelSelect) {
+            console.error('Model select element not found');
+            return;
+        }
+        
+        modelSelect.innerHTML = '';
+        
+        const models = data.models || {};
+        
+        // モデルが空の場合の処理
+        if (Object.keys(models).length === 0) {
+            // エラーメッセージがある場合は表示
+            if (data.error) {
+                showError(`モデル一覧が取得できませんでした: ${data.error}`);
+            }
+            
+            // プレースホルダーオプションを追加
+            const placeholderOption = document.createElement('option');
+            placeholderOption.value = '';
+            placeholderOption.textContent = 'API設定が必要です';
+            placeholderOption.disabled = true;
+            placeholderOption.selected = true;
+            modelSelect.appendChild(placeholderOption);
+            
+            // 翻訳ボタンを無効化
+            const submitButton = document.getElementById('submitButton');
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.title = 'API設定を完了してください';
+            }
+            
+            console.log('No models available. API configuration required.');
+            return;
+        }
+        
+        // モデルオプションをアルファベット順で追加
+        Object.entries(models)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .forEach(([modelId, displayName]) => {
+                const option = document.createElement('option');
+                option.value = modelId;
+                option.textContent = displayName;
+                modelSelect.appendChild(option);
+            });
+        
+        // デフォルトモデルを選択（Claude 3.5 Haikuを優先）
+        const defaultModel = 'claude-3-5-haiku';
+        if (models[defaultModel]) {
+            modelSelect.value = defaultModel;
+        } else {
+            // Claude 3.5 Haikuがない場合は最初のモデル（アルファベット順で最初）を選択
+            const sortedModelIds = Object.keys(models).sort();
+            if (sortedModelIds.length > 0) {
+                modelSelect.value = sortedModelIds[0];
+            }
+        }
+        
+        // 翻訳ボタンを有効化
+        const submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.title = '';
+        }
+        
+        console.log('Models loaded successfully (alphabetical order):', Object.keys(models).sort());
+        showSuccess('モデル一覧を読み込みました');
+        
+    } catch (error) {
+        console.error('Model loading error:', error);
+        showError(`モデル一覧の読み込みに失敗しました: ${error.message}`);
+        
+        // エラー時も空の状態にする
+        const modelSelect = document.getElementById('model');
+        if (modelSelect) {
+            modelSelect.innerHTML = '';
+            const errorOption = document.createElement('option');
+            errorOption.value = '';
+            errorOption.textContent = 'モデル読み込みエラー';
+            errorOption.disabled = true;
+            errorOption.selected = true;
+            modelSelect.appendChild(errorOption);
+        }
+        
+        // 翻訳ボタンを無効化
+        const submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.disabled = true;
+            submitButton.title = 'API設定を確認してください';
+        }
+    }
+}
+
+
+// モデル更新ボタンの追加
+function addRefreshModelsButton() {
+    const modelSelect = document.getElementById('model');
+    if (!modelSelect) {
+        console.error('Model select element not found');
+        return;
+    }
+    
+    const modelContainer = modelSelect.parentElement;
+    
+    // 既存のボタンがあれば削除
+    const existingButton = modelContainer.querySelector('.refresh-models-btn');
+    if (existingButton) {
+        existingButton.remove();
+    }
+    
+    const refreshButton = document.createElement('button');
+    refreshButton.type = 'button';
+    refreshButton.className = 'refresh-models-btn btn btn-outline-secondary btn-sm';
+    refreshButton.innerHTML = '🔄 更新';
+    refreshButton.title = 'モデル一覧を更新';
+    refreshButton.style.marginLeft = '10px';
+    
+    refreshButton.addEventListener('click', async () => {
+        try {
+            refreshButton.disabled = true;
+            refreshButton.innerHTML = '🔄 更新中...';
+            
+            const response = await fetch('/api/models/refresh');
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.detail || 'モデル更新に失敗しました');
+            }
+            
+            showSuccess('モデル一覧を更新しました');
+            await loadModels(); // モデル一覧を再読み込み
+            
+        } catch (error) {
+            console.error('Model refresh error:', error);
+            showError(`モデル更新エラー: ${error.message}`);
+        } finally {
+            refreshButton.disabled = false;
+            refreshButton.innerHTML = '🔄 更新';
+        }
+    });
+    
+    modelContainer.appendChild(refreshButton);
+}
+
+// 言語読み込み機能
+async function loadLanguages() {
+    try {
+        console.log('Loading languages from API...');
+        
+        const response = await fetch('/api/languages');
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${data.detail || 'Unknown error'}`);
+        }
+        
+        const sourceLangSelect = document.getElementById('sourceLang');
+        const targetLangSelect = document.getElementById('targetLang');
+        
+        if (!sourceLangSelect || !targetLangSelect) {
+            console.error('Language select elements not found');
+            return;
+        }
+        
+        const languages = data.languages || {};
+        
+        // 既存のオプションをクリア
+        sourceLangSelect.innerHTML = '';
+        targetLangSelect.innerHTML = '';
+        
+        // 言語オプションを追加
+        Object.entries(languages).forEach(([langCode, langName]) => {
+            const sourceOption = document.createElement('option');
+            sourceOption.value = langCode;
+            sourceOption.textContent = langName;
+            sourceLangSelect.appendChild(sourceOption);
+            
+            const targetOption = document.createElement('option');
+            targetOption.value = langCode;
+            targetOption.textContent = langName;
+            targetLangSelect.appendChild(targetOption);
+        });
+        
+        // デフォルト言語を設定
+        sourceLangSelect.value = 'en'; // English
+        targetLangSelect.value = 'ja'; // Japanese
+        
+        console.log('Languages loaded successfully:', languages);
+        
+    } catch (error) {
+        console.error('Language loading error:', error);
+        showError(`言語一覧の読み込みに失敗しました: ${error.message}`);
+    }
+}
+
+// 新しい通知関数を追加（既存のshowError, showSuccess, showWarningと統合）
+function showStatus(message, type = 'info') {
+    switch(type) {
+        case 'error':
+            showError(message);
+            break;
+        case 'success':
+            showSuccess(message);
+            break;
+        case 'warning':
+            showWarning(message);
+            break;
+        case 'info':
+        default:
+            // 新しい情報メッセージ用の関数
+            showInfo(message);
+            break;
+    }
+}
+
+function showInfo(message) {
+    const alertsContainer = document.getElementById('alerts');
+    if (!alertsContainer) {
+        console.error('Alerts container not found');
+        return;
+    }
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-info alert-dismissible fade show';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    alertsContainer.appendChild(alertDiv);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Page loaded, initializing...');
@@ -66,8 +311,16 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeWebSocket();
     
     // API設定チェックを少し遅延させる
-    setTimeout(() => {
-        checkApiSettings();
+    setTimeout(async () => {
+        await checkApiSettings();
+        
+        // API設定が完了している場合のみモデルと言語を読み込み
+        const uploadFormVisible = uploadForm && uploadForm.style.display !== 'none';
+        if (uploadFormVisible) {
+            await loadModels();
+            await loadLanguages();
+            addRefreshModelsButton();
+        }
     }, 100);
     
     // Settings button and modal elements
@@ -111,6 +364,22 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             saveApiSettings();
         });
+    }
+    
+    // ファイル入力の検証イベントリスナー
+    const fileInput = document.getElementById('file');
+    if (fileInput) {
+        fileInput.addEventListener('change', validateFileInput);
+    }
+    
+    // 言語選択の検証イベントリスナー
+    const sourceLangSelect = document.getElementById('sourceLang');
+    const targetLangSelect = document.getElementById('targetLang');
+    if (sourceLangSelect) {
+        sourceLangSelect.addEventListener('change', validateLanguageSelection);
+    }
+    if (targetLangSelect) {
+        targetLangSelect.addEventListener('change', validateLanguageSelection);
     }
 });
 
@@ -203,6 +472,11 @@ async function saveApiSettings() {
             apiUrlInput.value = '';
             // Re-check API settings status
             await checkApiSettings();
+            
+            // API設定が保存された後にモデルと言語を読み込み
+            await loadModels();
+            await loadLanguages();
+            addRefreshModelsButton();
         } else {
             showError(result.detail || 'Failed to save API settings');
         }
@@ -257,6 +531,10 @@ async function updateApiSettings() {
             const settingsModal = document.getElementById('settingsModal');
             if (settingsModal) settingsModal.style.display = 'none';
             modalApiKey.value = '';
+            
+            // API設定が更新された後にモデルと言語を読み込み
+            await loadModels();
+            await loadLanguages();
         } else {
             showError(result.detail || 'Failed to update API settings');
         }
