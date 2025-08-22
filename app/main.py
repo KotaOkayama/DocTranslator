@@ -55,10 +55,12 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 CSS_DIR = os.path.join(STATIC_DIR, "css")
 JS_DIR = os.path.join(STATIC_DIR, "js")
 
-# Import translation module
+""" # Import translation module
 try:
-    from app.core.translator import translate_document, AVAILABLE_MODELS, LANGUAGES
+    from app.core.translator import translate_document, get_available_models, LANGUAGES
 
+    # 動的にモデル一覧を取得
+    AVAILABLE_MODELS = get_available_models()
     logger.info(f"Available models: {list(AVAILABLE_MODELS.keys())}")
     logger.info(f"Supported languages: {list(LANGUAGES.keys())}")
 except ImportError as e:
@@ -79,6 +81,94 @@ except ImportError as e:
         "de": "German",
         "es": "Spanish",
     }
+except Exception as e:
+    logger.error(f"Failed to get available models: {e}")
+    # フォールバック用のデフォルトモデル
+    AVAILABLE_MODELS = {
+        "claude-4-sonnet": "Claude 4 Sonnet",
+        "claude-3-7-sonnet": "Claude 3.7 Sonnet", 
+        "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2",
+        "claude-3-5-haiku": "Claude 3.5 Haiku",
+    }
+    LANGUAGES = {
+        "ja": "Japanese",
+        "en": "English",
+        "zh": "Chinese",
+        "ko": "Korean",
+        "fr": "French",
+        "de": "German",
+        "es": "Spanish",
+    } """
+
+""" # Import translation module
+try:
+    from app.core.translator import translate_document, fetch_available_models, LANGUAGES
+
+    # 動的にモデル一覧を取得（エラー時はフォールバックしない）
+    try:
+        AVAILABLE_MODELS = fetch_available_models()
+        logger.info(f"Available models: {list(AVAILABLE_MODELS.keys())}")
+    except Exception as e:
+        logger.error(f"Failed to get available models: {e}")
+        # フォールバックを削除し、エラーを再発生させる
+        raise RuntimeError(f"Failed to initialize models from GenAI Hub: {str(e)}")
+    
+    logger.info(f"Supported languages: {list(LANGUAGES.keys())}")
+    
+except ImportError as e:
+    logger.error(f"Failed to import translation module: {e}")
+    raise ImportError(f"Translation module import failed: {str(e)}")
+except Exception as e:
+    logger.error(f"Failed to initialize translation system: {e}")
+    raise RuntimeError(f"Translation system initialization failed: {str(e)}") """
+
+# Import translation module
+try:
+    from app.core.translator import translate_document, LANGUAGES
+    from app.config import api_settings_exist
+    
+    # API設定の存在チェック
+    if api_settings_exist():
+        # API設定がある場合のみモデル一覧を動的取得
+        try:
+            from app.core.translator import fetch_available_models
+            logger.info("API settings found. Fetching available models...")
+            AVAILABLE_MODELS = fetch_available_models()
+            logger.info(f"Available models loaded: {list(AVAILABLE_MODELS.keys())}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch models despite API settings existing: {e}")
+            logger.info("Setting models to empty due to fetch failure")
+            AVAILABLE_MODELS = {}
+    else:
+        # API設定がない場合はモデル一覧を空にする
+        logger.info("No API settings found. Models list will be empty until API is configured.")
+        AVAILABLE_MODELS = {}
+    
+    logger.info(f"Supported languages: {list(LANGUAGES.keys())}")
+    
+except ImportError as e:
+    logger.error(f"Failed to import translation module: {e}")
+    # インポートエラーの場合も空にする
+    AVAILABLE_MODELS = {}
+    LANGUAGES = {
+        "ja": "Japanese",
+        "en": "English",
+        "zh": "Chinese",
+        "ko": "Korean",
+        "fr": "French",
+        "de": "German",
+        "es": "Spanish",
+        "hi": "Hindi",
+        "vi": "Vietnamese",
+        "th": "Thai",
+    }
+    logger.warning("Models list set to empty due to import error")
+except Exception as e:
+    logger.error(f"Unexpected error during initialization: {e}")
+    # 予期しないエラーでもモデル一覧は空にする
+    AVAILABLE_MODELS = {}
+    logger.warning("Models list set to empty due to initialization error")
+
 
 # Debug information for static file directory
 logger.debug(f"Static file directory: {STATIC_DIR}")
@@ -107,7 +197,6 @@ for directory in [UPLOAD_DIR, DOWNLOAD_DIR, LOGS_DIR]:
 
 # 翻訳タスク管理用の辞書
 active_translations = {}
-
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -155,9 +244,7 @@ class ConnectionManager:
                 logger.error(f"WebSocket send error: {e}")
                 self.disconnect(client_id)
 
-
 manager = ConnectionManager()
-
 
 # LibreOffice check function
 def check_libreoffice():
@@ -172,7 +259,6 @@ def check_libreoffice():
     except Exception as e:
         logger.error(f"LibreOffice check error: {e}")
     return False
-
 
 # Application startup event
 @app.on_event("startup")
@@ -250,7 +336,6 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Failed to clean up temporary files: {e}")
 
-
 # 翻訳タスクをキャンセルするエンドポイント
 @app.post("/api/cancel-translation/{client_id}")
 async def cancel_translation(client_id: str):
@@ -264,7 +349,6 @@ async def cancel_translation(client_id: str):
     else:
         logger.warning(f"No active translation found for client {client_id}")
         return {"status": "not_found", "message": "No active translation found"}
-
 
 def get_progress_message(progress: float) -> str:
     """Return a message based on the progress"""
@@ -285,13 +369,11 @@ def get_progress_message(progress: float) -> str:
     else:
         return "Translation completed"
 
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     logger.info("Received health check request")
     return {"status": "ok", "version": "0.1.0", "timestamp": datetime.now().isoformat()}
-
 
 # Root page endpoint
 @app.get("/", response_class=HTMLResponse)
@@ -317,7 +399,6 @@ async def read_root():
         """
         )
 
-
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """Handle WebSocket connections"""
@@ -341,19 +422,139 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(client_id)
 
+# API endpoints
+# @app.get("/api/models")
+# async def get_models():
+#    """Return list of available translation models"""
+#     try:
+#         # 最新のモデル一覧を取得
+#         from app.core.translator import get_available_models
+#         models = get_available_models()
+#         return {"models": models}
+#     except Exception as e:
+#         logger.error(f"モデル一覧取得エラー: {e}")
+#         # エラーの場合はデフォルトモデルを返す
+#         return {"models": AVAILABLE_MODELS, "error": str(e)}
+# 
+# @app.get("/api/models/refresh")
+# async def refresh_models():
+#     """Refresh available models list"""
+#     try:
+#         from app.core.translator import fetch_available_models
+#         models = fetch_available_models()
+#         
+#         # グローバル変数を更新
+#         global AVAILABLE_MODELS
+#         AVAILABLE_MODELS = models
+#         
+#         return {"models": models, "message": "Models refreshed successfully"}
+#     except Exception as e:
+#         logger.error(f"モデル一覧更新エラー: {e}")
+#         raise HTTPException(status_code=500, detail=f"Failed to refresh models: {str(e)}")
 
 # API endpoints
+
+# @app.get("/api/models")
+# async def get_models():
+#     """Return list of available translation models"""
+#     try:
+#         # 最新のモデル一覧を取得（フォールバック無し）
+#         from app.core.translator import fetch_available_models
+#         models = fetch_available_models()
+#         return {"models": models}
+#     except Exception as e:
+#         logger.error(f"モデル一覧取得エラー: {e}")
+#         # フォールバックを削除し、エラーレスポンスを返す
+#         raise HTTPException(
+#             status_code=500, 
+#             detail=f"Failed to fetch models from GenAI Hub: {str(e)}"
+#         )
 @app.get("/api/models")
 async def get_models():
     """Return list of available translation models"""
-    return {"models": AVAILABLE_MODELS}
+    try:
+        from app.config import api_settings_exist
+        
+        # API設定がない場合は空のモデル一覧を返す
+        if not api_settings_exist():
+            logger.debug("No API settings found. Returning empty models list.")
+            return {
+                "models": {}, 
+                "error": "API settings not configured. Please configure API key and URL first."
+            }
+        
+        # API設定がある場合は最新のモデル一覧を取得
+        from app.core.translator import fetch_available_models
+        models = fetch_available_models()
+        
+        # グローバル変数も更新
+        global AVAILABLE_MODELS
+        AVAILABLE_MODELS = models
+        
+        return {"models": models}
+        
+    except Exception as e:
+        logger.error(f"モデル一覧取得エラー: {e}")
+        # エラーの場合も空のモデル一覧を返す
+        return {
+            "models": {}, 
+            "error": f"Failed to fetch models: {str(e)}"
+        }
+
+
+
+
+# @app.get("/api/models/refresh")
+# async def refresh_models():
+#     """Refresh available models list"""
+#     try:
+#         from app.core.translator import fetch_available_models
+#         models = fetch_available_models()
+#         
+#         # グローバル変数を更新
+#         global AVAILABLE_MODELS
+#         AVAILABLE_MODELS = models
+#         
+#         return {"models": models, "message": "Models refreshed successfully"}
+#     except Exception as e:
+#         logger.error(f"モデル一覧更新エラー: {e}")
+#         raise HTTPException(
+#             status_code=500, 
+#             detail=f"Failed to refresh models from GenAI Hub: {str(e)}"
+#         )
+@app.get("/api/models/refresh")
+async def refresh_models():
+    """Refresh available models list"""
+    try:
+        from app.config import api_settings_exist
+        
+        # API設定チェック
+        if not api_settings_exist():
+            raise HTTPException(
+                status_code=400, 
+                detail="API settings not configured. Please configure API settings first."
+            )
+        
+        from app.core.translator import fetch_available_models
+        models = fetch_available_models()
+        
+        # グローバル変数を更新
+        global AVAILABLE_MODELS
+        AVAILABLE_MODELS = models
+        
+        return {"models": models, "message": "Models refreshed successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"モデル一覧更新エラー: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to refresh models: {str(e)}")
 
 
 @app.get("/api/languages")
 async def get_languages():
     """Return list of supported languages"""
     return {"languages": LANGUAGES}
-
 
 @app.get("/api/status")
 async def get_status():
@@ -364,7 +565,6 @@ async def get_status():
         "timestamp": datetime.now().isoformat(),
         "debug_mode": DEBUG,
     }
-
 
 # API設定エンドポイントを追加
 @app.post("/api/save-api-settings")
@@ -404,7 +604,6 @@ async def save_api_settings_endpoint(request: Request, api_key: str = Form(...),
     except Exception as e:
         logger.error(f"API settings save error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/api/check-api-settings")
 async def check_api_settings():
@@ -797,7 +996,6 @@ async def translate_file(
             del active_translations[client_id]
             logger.debug(f"Cleaned up translation state for client {client_id}")
 
-
 @app.get("/api/download/{filename}")
 async def download_file(filename: str):
     """Handle file downloads"""
@@ -859,6 +1057,7 @@ async def download_file(filename: str):
             ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
             ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ".pdf": "application/pdf",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }
 
         media_type = media_types.get(file_ext, "application/octet-stream")
@@ -869,25 +1068,8 @@ async def download_file(filename: str):
             media_type=media_type,
         )
 
-
 # Main application entry point
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-# --- XLSX 追加対応 ---
-from app.core import translator
-
-def handle_file(file_path: str, output_path: str, translate_func):
-    ext = os.path.splitext(file_path)[1].lower()
-    if ext == ".docx":
-        translator.translate_docx(file_path, output_path, translate_func)
-    elif ext == ".pptx":
-        translator.translate_pptx(file_path, output_path, translate_func)
-    elif ext == ".pdf":
-        translator.translate_pdf(file_path, output_path, translate_func)
-    elif ext == ".xlsx":
-        translator.translate_xlsx(file_path, output_path, translate_func)
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")

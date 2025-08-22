@@ -12,11 +12,11 @@ import json
 import os
 import time
 import logging
-
+import re
 import subprocess
 import tempfile
 import shutil
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Dict, List
 
 import PyPDF2
 import pdfplumber
@@ -31,8 +31,6 @@ import pandas as pd
 import requests
 
 import concurrent.futures
-
-
 
 # Logging configuration
 logging.basicConfig(
@@ -54,13 +52,242 @@ def get_api_url():
     from app.config import get_api_url
     return get_api_url()
 
-# Available models
-AVAILABLE_MODELS = {
-    "claude-4-sonnet": "Claude 4 Sonnet",  # 追加
-    "claude-3-7-sonnet": "Claude 3.7 Sonnet",
-    "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2",
-    "claude-3-5-haiku": "Claude 3.5 Haiku",
-}
+def get_api_key():
+    """Get API key from environment variable"""
+    from app.config import get_api_key
+    return get_api_key()
+
+# 翻訳に適さないモデルのフィルタリング用キーワード
+EXCLUDED_MODEL_KEYWORDS = [
+    "copilot",
+    "documentation", 
+    "jira",
+    "ngsiem",
+    "dom-data-extractor",
+    "wiki",
+    "compintel",
+    "coding"
+]
+
+def filter_translation_models(models: List[str]) -> List[str]:
+    """
+    翻訳に適したモデルのみをフィルタリングします
+    
+    Args:
+        models: モデル名のリスト
+        
+    Returns:
+        翻訳に適したモデル名のリスト
+    """
+    filtered_models = []
+    
+    for model in models:
+        model_lower = model.lower()
+        
+        # 除外キーワードが含まれているかチェック
+        should_exclude = any(keyword in model_lower for keyword in EXCLUDED_MODEL_KEYWORDS)
+        
+        if not should_exclude:
+            filtered_models.append(model)
+    
+    logger.info(f"モデルフィルタリング結果: {len(models)} -> {len(filtered_models)} モデル")
+    logger.debug(f"除外されたモデル: {set(models) - set(filtered_models)}")
+    
+    return filtered_models
+
+def format_model_name(model_name: str) -> str:
+    """
+    GenAI Hub特有のモデル名を適切に整形します
+    
+    Args:
+        model_name: 元のモデル名
+        
+    Returns:
+        整形されたモデル名
+    """
+    # Claude系モデルの整形
+    if model_name.startswith("claude-"):
+        # claude-3-5-sonnet-v2 -> Claude 3.5 Sonnet V2
+        # claude-4-sonnet -> Claude 4 Sonnet
+        # claude-3-7-sonnet -> Claude 3.7 Sonnet
+        parts = model_name.split("-")
+        if len(parts) >= 3:
+            version = parts[1]  # 3, 4
+            subversion = parts[2] if len(parts) > 2 else ""  # 5, 7
+            model_type = parts[3] if len(parts) > 3 else parts[2]  # sonnet, haiku, opus
+            variant = parts[4] if len(parts) > 4 else ""  # v2
+            
+            formatted = f"Claude {version}"
+            if subversion and subversion.isdigit():
+                formatted += f".{subversion}"
+            formatted += f" {model_type.title()}"
+            if variant:
+                formatted += f" {variant.upper()}"
+            
+            return formatted
+    
+    # Llama系モデルの整形
+    elif model_name.startswith("llama"):
+        # llama3-1-70b -> Llama 3.1 70B
+        # llama4-maverick-17b -> Llama 4 Maverick 17B
+        parts = model_name.split("-")
+        if len(parts) >= 2:
+            version_part = parts[0].replace("llama", "")  # 3, 4
+            
+            formatted = f"Llama {version_part}"
+            
+            # バージョン番号の処理
+            if len(parts) > 1 and parts[1].isdigit():
+                formatted += f".{parts[1]}"
+                remaining_parts = parts[2:]
+            else:
+                remaining_parts = parts[1:]
+            
+            # 残りの部分を処理
+            for part in remaining_parts:
+                if part.endswith("b") and part[:-1].isdigit():
+                    # サイズ情報 (70b -> 70B)
+                    formatted += f" {part.upper()}"
+                else:
+                    # その他の情報 (maverick, scout等)
+                    formatted += f" {part.title()}"
+            
+            return formatted
+    
+    # その他のモデルは最初の文字を大文字にして返す
+    return model_name.replace("-", " ").title()
+
+def fetch_available_models() -> Dict[str, str]:
+    """
+    GenAI HUBから利用可能なモデル一覧を取得します
+    
+    Returns:
+        モデル辞書 {model_id: display_name}
+        
+    Raises:
+        ValueError: API呼び出しに失敗した場合
+        ConnectionError: 接続に失敗した場合
+    """
+    logger.info("GenAI HUBからモデル一覧を取得しています...")
+    
+    # API設定を取得
+    api_key = get_api_key()
+    api_url = get_api_url()
+    
+    if not api_key:
+        raise ValueError("API キーが設定されていません。設定画面でAPI キーを設定してください。")
+    
+    if not api_url:
+        raise ValueError("API URLが設定されていません。設定画面でAPI URLを設定してください。")
+    
+    # モデル一覧取得用のエンドポイントを構築
+    # チャットエンドポイントからモデル一覧エンドポイントに変換
+    if api_url.endswith("/chat/completions"):
+        models_url = api_url.replace("/chat/completions", "/models")
+    elif api_url.endswith("/v1/chat/completions"):
+        models_url = api_url.replace("/v1/chat/completions", "/v1/models")
+    else:
+        # フォールバック: URLの末尾に/modelsを追加
+        models_url = api_url.rstrip("/") + "/models"
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        logger.debug(f"モデル一覧取得URL: {models_url}")
+        response = requests.get(
+            models_url,
+            headers=headers,
+            timeout=30
+        )
+        
+        logger.debug(f"API レスポンスステータス: {response.status_code}")
+        
+        if response.status_code != 200:
+            logger.error(f"モデル一覧取得エラー: ステータスコード {response.status_code}")
+            logger.error(f"レスポンス: {response.text}")
+            raise ValueError(f"モデル一覧の取得に失敗しました。ステータスコード: {response.status_code}")
+        
+        result = response.json()
+        logger.debug(f"API レスポンス: {result}")
+        
+        # GenAI Hubのレスポンスからcontentフィールドを取得
+        if "content" not in result:
+            logger.error(f"API レスポンスに 'content' フィールドがありません: {result}")
+            raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
+        
+        models_list = result["content"]
+        
+        if not isinstance(models_list, list):
+            logger.error(f"'content' フィールドがリスト形式ではありません: {type(models_list)}")
+            raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
+        
+        logger.info(f"取得したモデル数: {len(models_list)}")
+        logger.debug(f"取得したモデル: {models_list}")
+        
+        # 翻訳に適したモデルのみをフィルタリング
+        filtered_models = filter_translation_models(models_list)
+        
+        if not filtered_models:
+            logger.warning("翻訳に適したモデルが見つかりませんでした")
+            raise ValueError("翻訳に適したモデルが見つかりませんでした。")
+        
+        # モデル辞書を作成し、アルファベット順にソート
+        models_dict = {}
+        for model in filtered_models:
+            display_name = format_model_name(model)
+            models_dict[model] = display_name
+        
+        # モデルIDでアルファベット順にソート
+        sorted_models_dict = dict(sorted(models_dict.items()))
+        
+        logger.info(f"利用可能な翻訳モデル（アルファベット順）: {list(sorted_models_dict.keys())}")
+        
+        return sorted_models_dict
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"モデル一覧取得リクエストエラー: {e}")
+        raise ConnectionError(f"GenAI HUBへの接続に失敗しました: {str(e)}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON デコードエラー: {e}")
+        logger.error(f"レスポンス: {response.text if 'response' in locals() else 'なし'}")
+        raise ValueError(f"モデル一覧の取得に失敗しました。レスポンスの解析エラー: {str(e)}")
+    except Exception as e:
+        logger.error(f"モデル一覧取得エラー: {e}")
+        raise ValueError(f"モデル一覧の取得に失敗しました: {str(e)}")
+
+
+# フォールバック用のデフォルトモデル（API呼び出しが失敗した場合に使用）
+# DEFAULT_MODELS = {
+#     "claude-3-5-haiku": "Claude 3.5 Haiku",
+#     "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2", 
+#     "claude-3-7-sonnet": "Claude 3.7 Sonnet",
+#     "claude-4-sonnet": "Claude 4 Sonnet",
+# }
+
+# アルファベット順にソート
+# DEFAULT_MODELS = dict(sorted(DEFAULT_MODELS.items()))
+
+def get_available_models() -> Dict[str, str]:
+    """
+    利用可能なモデル一覧を取得します（フォールバック無し）
+    
+    Returns:
+        モデル辞書 {model_id: display_name}
+    Raises:
+        ValueError: API呼び出しに失敗した場合
+        ConnectionError: 接続に失敗した場合
+    """
+#     try:
+#         return fetch_available_models()
+#     except Exception as e:
+#        logger.error(f"モデル一覧の動的取得に失敗しました。デフォルトモデルを使用します: {e}")
+#        return DEFAULT_MODELS
+
+    # フォールバック処理を削除し、エラーを再発生させる
+    return fetch_available_models()
 
 # Language options
 LANGUAGES = {
@@ -90,7 +317,6 @@ TRANSLATION_CONFIG = {
 # Global Translation Cache
 TRANSLATION_CACHE = {}
 
-
 def save_translation_cache(cache_file: str = "translation_cache.json"):
     """Save translation cache to file"""
     try:
@@ -99,7 +325,6 @@ def save_translation_cache(cache_file: str = "translation_cache.json"):
         logger.info(f"Translation cache saved: {len(TRANSLATION_CACHE)} entries")
     except Exception as e:
         logger.error(f"Failed to save cache: {e}")
-
 
 def load_translation_cache(cache_file: str = "translation_cache.json"):
     """Loading translation cache from file"""
@@ -114,7 +339,6 @@ def load_translation_cache(cache_file: str = "translation_cache.json"):
     except Exception as e:
         logger.error(f"キャッシュのロードに失敗しました: {e}")
         TRANSLATION_CACHE = {}
-
 
 # キャッシュをロード
 load_translation_cache()
@@ -256,7 +480,6 @@ def translate_text_with_genai_hub(
 
             return f"[翻訳エラー: リクエスト失敗 - {str(e)}]"
 
-
         except json.JSONDecodeError as e:
             logger.error(f"JSON デコードエラー: {e}")
             logger.error(
@@ -289,7 +512,6 @@ def translate_text_with_genai_hub(
                 continue
 
             return f"[翻訳エラー: {str(e)}]"
-
 
 def translate_text_with_cache(
     text: str,
@@ -334,7 +556,6 @@ def translate_text_with_cache(
 
     return translated
 
-
 def optimize_text_for_translation(text: str) -> str:
     """
     翻訳のためにテキストを最適化します。
@@ -359,7 +580,6 @@ def optimize_text_for_translation(text: str) -> str:
             filtered_lines.append(line)
 
     return "\n".join(filtered_lines)
-
 
 def translate_dataframe(
     df: pd.DataFrame,
@@ -479,7 +699,6 @@ def translate_dataframe(
 
     return df
 
-
 def save_text_files(df: pd.DataFrame, output_dir: str, base_filename: str) -> tuple:
     """
     抽出したテキストと翻訳したテキストをファイルに保存します。
@@ -595,11 +814,9 @@ def save_text_files(df: pd.DataFrame, output_dir: str, base_filename: str) -> tu
         )
         return extracted_file, None
 
-
 #
 # PPTX 処理関数
 #
-
 
 def extract_text_from_pptx(
     pptx_path: str, progress_callback: Optional[Callable] = None
@@ -683,7 +900,6 @@ def extract_text_from_pptx(
     except Exception as e:
         logger.error(f"PPTXからのテキスト抽出エラー: {e}")
         raise
-
 
 def reimport_text_to_pptx(
     pptx_path: str,
@@ -829,11 +1045,9 @@ def reimport_text_to_pptx(
         logger.error(f"PPTX再インポートエラー: {e}")
         raise
 
-
 #
 # DOCX 処理関数
 #
-
 
 def extract_text_from_docx(
     docx_path: str, progress_callback: Optional[Callable] = None
@@ -976,7 +1190,6 @@ def extract_text_from_docx(
     except Exception as e:
         logger.error(f"DOCXからのテキスト抽出エラー: {e}")
         raise
-
 
 def reimport_text_to_docx(
     docx_path: str,
@@ -1150,11 +1363,9 @@ def reimport_text_to_docx(
         logger.error(f"DOCX再インポートエラー: {e}")
         raise
 
-
 #
 # PDF 処理関数（translator.py.old.pyの処理フローに合わせて修正）
 #
-
 
 def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
     """
@@ -1309,7 +1520,6 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
         except Exception as e2:
             logger.error(f"テキスト抽出によるDOCX作成も失敗しました: {e2}")
             raise ValueError(f"PDFからDOCXへの変換に失敗しました: {str(e2)}")
-
 
 def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
     """
@@ -1504,7 +1714,6 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
     
     return docx_copy_path
 
-
 def translate_pdf(
     input_path: str,
     output_path: str,
@@ -1624,7 +1833,6 @@ def translate_pdf(
                 logger.debug(f"一時ファイルを削除しました: {temp_docx_output}")
         except Exception as e:
             logger.warning(f"一時ファイルの削除に失敗しました: {e}")
-
 
 def translate_xlsx(
     input_path: str,
@@ -1851,7 +2059,6 @@ def translate_pptx(
 
     return extracted_file, translated_file
 
-
 def translate_docx(
     input_path: str,
     output_path: str,
@@ -1966,7 +2173,6 @@ def translate_docx(
 
     return extracted_file, translated_file
 
-
 def check_libreoffice() -> Tuple[bool, str]:
     """
     LibreOfficeの可用性をチェックします。
@@ -1997,7 +2203,6 @@ def check_libreoffice() -> Tuple[bool, str]:
         logger.error(error_msg)
         return False, error_msg
 
-
 def detect_file_type(file_path: str) -> str:
     """
     ファイルの拡張子からファイル形式を検出します。
@@ -2019,7 +2224,6 @@ def detect_file_type(file_path: str) -> str:
         return "xlsx"
     else:
         raise ValueError(f"サポートされていないファイル形式です: {ext}")
-
 
 def translate_document(
     input_path: str,
@@ -2118,7 +2322,6 @@ def translate_document(
             save_translation_cache()
         raise
 
-
 # テスト用コード
 if __name__ == "__main__":
     # API キーを環境変数から取得
@@ -2140,7 +2343,8 @@ if __name__ == "__main__":
 
 # エクスポートする関数と変数
 __all__ = [
-    "AVAILABLE_MODELS",
+    "get_available_models",
+    "fetch_available_models",
     "LANGUAGES",
     "TRANSLATION_CONFIG",
     "translate_pptx",
