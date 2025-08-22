@@ -55,72 +55,6 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 CSS_DIR = os.path.join(STATIC_DIR, "css")
 JS_DIR = os.path.join(STATIC_DIR, "js")
 
-""" # Import translation module
-try:
-    from app.core.translator import translate_document, get_available_models, LANGUAGES
-
-    # 動的にモデル一覧を取得
-    AVAILABLE_MODELS = get_available_models()
-    logger.info(f"Available models: {list(AVAILABLE_MODELS.keys())}")
-    logger.info(f"Supported languages: {list(LANGUAGES.keys())}")
-except ImportError as e:
-    logger.error(f"Failed to import translation module: {e}")
-    # Define dummy constants
-    AVAILABLE_MODELS = {
-        "claude-4-sonnet": "Claude 4 Sonnet",
-        "claude-3-7-sonnet": "Claude 3.7 Sonnet",
-        "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2",
-        "claude-3-5-haiku": "Claude 3.5 Haiku",
-    }
-    LANGUAGES = {
-        "ja": "Japanese",
-        "en": "English",
-        "zh": "Chinese",
-        "ko": "Korean",
-        "fr": "French",
-        "de": "German",
-        "es": "Spanish",
-    }
-except Exception as e:
-    logger.error(f"Failed to get available models: {e}")
-    # フォールバック用のデフォルトモデル
-    AVAILABLE_MODELS = {
-        "claude-4-sonnet": "Claude 4 Sonnet",
-        "claude-3-7-sonnet": "Claude 3.7 Sonnet", 
-        "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2",
-        "claude-3-5-haiku": "Claude 3.5 Haiku",
-    }
-    LANGUAGES = {
-        "ja": "Japanese",
-        "en": "English",
-        "zh": "Chinese",
-        "ko": "Korean",
-        "fr": "French",
-        "de": "German",
-        "es": "Spanish",
-    } """
-
-""" # Import translation module
-try:
-    from app.core.translator import translate_document, fetch_available_models, LANGUAGES
-
-    # 動的にモデル一覧を取得（エラー時はフォールバックしない）
-    try:
-        AVAILABLE_MODELS = fetch_available_models()
-        logger.info(f"Available models: {list(AVAILABLE_MODELS.keys())}")
-    except Exception as e:
-        logger.error(f"Failed to get available models: {e}")
-        # フォールバックを削除し、エラーを再発生させる
-        raise RuntimeError(f"Failed to initialize models from GenAI Hub: {str(e)}")
-    
-    logger.info(f"Supported languages: {list(LANGUAGES.keys())}")
-    
-except ImportError as e:
-    logger.error(f"Failed to import translation module: {e}")
-    raise ImportError(f"Translation module import failed: {str(e)}")
-except Exception as e:
-    logger.error(f"Failed to initialize translation system: {e}")
-    raise RuntimeError(f"Translation system initialization failed: {str(e)}") """
 
 # Import translation module
 try:
@@ -422,53 +356,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(client_id)
 
-# API endpoints
-# @app.get("/api/models")
-# async def get_models():
-#    """Return list of available translation models"""
-#     try:
-#         # 最新のモデル一覧を取得
-#         from app.core.translator import get_available_models
-#         models = get_available_models()
-#         return {"models": models}
-#     except Exception as e:
-#         logger.error(f"モデル一覧取得エラー: {e}")
-#         # エラーの場合はデフォルトモデルを返す
-#         return {"models": AVAILABLE_MODELS, "error": str(e)}
-# 
-# @app.get("/api/models/refresh")
-# async def refresh_models():
-#     """Refresh available models list"""
-#     try:
-#         from app.core.translator import fetch_available_models
-#         models = fetch_available_models()
-#         
-#         # グローバル変数を更新
-#         global AVAILABLE_MODELS
-#         AVAILABLE_MODELS = models
-#         
-#         return {"models": models, "message": "Models refreshed successfully"}
-#     except Exception as e:
-#         logger.error(f"モデル一覧更新エラー: {e}")
-#         raise HTTPException(status_code=500, detail=f"Failed to refresh models: {str(e)}")
 
 # API endpoints
 
-# @app.get("/api/models")
-# async def get_models():
-#     """Return list of available translation models"""
-#     try:
-#         # 最新のモデル一覧を取得（フォールバック無し）
-#         from app.core.translator import fetch_available_models
-#         models = fetch_available_models()
-#         return {"models": models}
-#     except Exception as e:
-#         logger.error(f"モデル一覧取得エラー: {e}")
-#         # フォールバックを削除し、エラーレスポンスを返す
-#         raise HTTPException(
-#             status_code=500, 
-#             detail=f"Failed to fetch models from GenAI Hub: {str(e)}"
-#         )
 @app.get("/api/models")
 async def get_models():
     """Return list of available translation models"""
@@ -503,25 +393,6 @@ async def get_models():
 
 
 
-
-# @app.get("/api/models/refresh")
-# async def refresh_models():
-#     """Refresh available models list"""
-#     try:
-#         from app.core.translator import fetch_available_models
-#         models = fetch_available_models()
-#         
-#         # グローバル変数を更新
-#         global AVAILABLE_MODELS
-#         AVAILABLE_MODELS = models
-#         
-#         return {"models": models, "message": "Models refreshed successfully"}
-#     except Exception as e:
-#         logger.error(f"モデル一覧更新エラー: {e}")
-#         raise HTTPException(
-#             status_code=500, 
-#             detail=f"Failed to refresh models from GenAI Hub: {str(e)}"
-#         )
 @app.get("/api/models/refresh")
 async def refresh_models():
     """Refresh available models list"""

@@ -280,13 +280,7 @@ def get_available_models() -> Dict[str, str]:
         ValueError: API呼び出しに失敗した場合
         ConnectionError: 接続に失敗した場合
     """
-#     try:
-#         return fetch_available_models()
-#     except Exception as e:
-#        logger.error(f"モデル一覧の動的取得に失敗しました。デフォルトモデルを使用します: {e}")
-#        return DEFAULT_MODELS
 
-    # フォールバック処理を削除し、エラーを再発生させる
     return fetch_available_models()
 
 # Language options
