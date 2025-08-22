@@ -1,169 +1,372 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DocTranslator</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/static/css/style.css" rel="stylesheet">
+    <title>DocTranslator - Document Translation Service</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="shortcut icon" href="/static/favicon.svg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .card-body {
+            padding: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            padding: 12px 15px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            border-radius: 10px;
+            padding: 8px 20px;
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 15px;
+            background-color: #f8f9fa;
+        }
+        
+        .progress-bar {
+            border-radius: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+        }
+        
+        .settings-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            border-radius: 15px;
+            border: none;
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px 15px 0 0;
+        }
+        
+        .form-text {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .refresh-models-btn {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+        }
+        
+        .model-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .model-container select {
+            flex: 1;
+        }
+    </style>
 </head>
 <body>
-    <!-- API Configuration Section -->
-    <div id="apiSettingsSection" class="container mt-5" style="display: none;">
-        <div class="row justify-content-center">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h2 class="card-title text-center mb-4">API Configuration</h2>
-                        <p class="text-center mb-4">Please configure your GenAI Hub API Key and API URL to use the translation service.</p>
-                        <form id="apiSettingsForm" onsubmit="return false;">
-                            <div class="mb-3">
-                                <label for="apiKey" class="form-label">GenAI HUB API Key</label>
-                                <input type="password" class="form-control" id="apiKey" placeholder="Enter your Anthropic GenAI HUB API Key">
+    <!-- Settings Button -->
+    <button id="settingsButton" class="btn btn-outline-light settings-button">
+        <i class="fas fa-cog"></i> Settings
+    </button>
+
+    <div class="container">
+        <!-- Alerts Container -->
+        <div id="alerts" class="mb-4"></div>
+
+        <!-- Main Card -->
+        <div class="card">
+            <div class="card-header">
+                <h1 class="mb-0">
+                    <i class="fas fa-language me-2"></i>
+                    DocTranslator
+                </h1>
+                <p class="mb-0 mt-2">AI-Powered Document Translation Service</p>
+            </div>
+            <div class="card-body">
+                <!-- API Settings Section -->
+                <div id="apiSettingsSection" style="display: none;">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-key fa-3x text-primary mb-3"></i>
+                        <h3>API Configuration Required</h3>
+                        <p class="text-muted">Please configure your GenAI Hub API settings to get started.</p>
+                    </div>
+                    
+                    <form id="apiSettingsForm">
+                        <div class="form-group">
+                            <label for="apiKey" class="form-label">
+                                <i class="fas fa-key me-2"></i>GenAI Hub API Key
+                            </label>
+                            <input type="password" class="form-control" id="apiKey" name="apiKey" required
+                                   placeholder="Enter your GenAI Hub API key">
+                            <div class="form-text">
+                                Your API key will be stored securely and used for document translation.
                             </div>
-                            <div class="mb-3">
-                                <label for="apiUrl" class="form-label">GenAI HUB API URL</label>
-                                <input type="text" class="form-control" id="apiUrl" placeholder="Enter the GenAI HUB API endpoint URL">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="apiUrl" class="form-label">
+                                <i class="fas fa-link me-2"></i>GenAI Hub API URL
+                            </label>
+                            <input type="url" class="form-control" id="apiUrl" name="apiUrl" required
+                                   placeholder="https://your-genai-hub-url/v1/chat/completions">
+                            <div class="form-text">
+                                Enter the complete API endpoint URL for your GenAI Hub instance.
                             </div>
-                            <button type="button" class="btn btn-primary w-100" onclick="saveApiSettings()">Save Configuration</button>
-                        </form>
+                        </div>
+                        
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save me-2"></i>Save API Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Upload Form -->
+                <div id="uploadForm" style="display: none;">
+                    <form id="translationForm" onsubmit="event.preventDefault(); uploadFile();">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="file" class="form-label">
+                                        <i class="fas fa-file-upload me-2"></i>Select Document
+                                    </label>
+                                    <input type="file" class="form-control" id="file" name="file" 
+                                           accept=".pptx,.docx,.pdf,.xlsx" required>
+                                    <div class="form-text">
+                                        Supported formats: PPTX, DOCX, PDF, XLSX (Max: 100MB)
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="model" class="form-label">
+                                        <i class="fas fa-robot me-2"></i>Translation Model
+                                    </label>
+                                    <div class="model-container">
+                                        <select class="form-select" id="model" name="model" required>
+                                            <option value="">Loading models...</option>
+                                        </select>
+                                        <!-- 更新ボタンはJavaScriptで動的に追加されます -->
+                                    </div>
+                                    <div class="form-text">
+                                        AI model for translation. Models are loaded from GenAI Hub.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="sourceLang" class="form-label">
+                                        <i class="fas fa-globe me-2"></i>Source Language
+                                    </label>
+                                    <select class="form-select" id="sourceLang" name="sourceLang" required>
+                                        <option value="">Loading languages...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="targetLang" class="form-label">
+                                        <i class="fas fa-language me-2"></i>Target Language
+                                    </label>
+                                    <select class="form-select" id="targetLang" name="targetLang" required>
+                                        <option value="">Loading languages...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="aiInstruction" class="form-label">
+                                <i class="fas fa-comment-dots me-2"></i>Additional Instructions (Optional)
+                            </label>
+                            <textarea class="form-control" id="aiInstruction" name="aiInstruction" rows="3"
+                                      placeholder="Enter any specific translation instructions or context..."></textarea>
+                            <div class="form-text">
+                                Provide additional context or specific instructions for the AI translator.
+                            </div>
+                        </div>
+
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitButton" disabled>
+                                <i class="fas fa-magic me-2"></i>Translate Document
+                            </button>
+                        </div>
+                    </form>
+
+                    <!-- Progress Section -->
+                    <div id="progressSection" class="mt-4" style="display: none;">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Translation Progress
+                                </h5>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         id="progressBar" role="progressbar" style="width: 0%" 
+                                         aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                        <span id="progressPercentage">0%</span>
+                                    </div>
+                                </div>
+                                <p id="progressText" class="mb-2">Ready to translate</p>
+                                <button id="cancelButton" class="btn btn-outline-danger btn-sm" 
+                                        onclick="cancelTranslation()" style="display: none;">
+                                    <i class="fas fa-times me-2"></i>Cancel Translation
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Download Section -->
+                    <div id="downloadSection" class="mt-4" style="display: none;">
+                        <div class="card border-success">
+                            <div class="card-body">
+                                <h5 class="card-title text-success">
+                                    <i class="fas fa-check-circle me-2"></i>Translation Complete
+                                </h5>
+                                <!-- Download links will be inserted here -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Main Translation Form -->
-    <div id="uploadForm" class="container mt-4" style="display: none;">
-        <div class="text-end mb-3">
-            <button id="settingsButton" class="btn btn-outline-primary">
-                <i class="bi bi-gear"></i> Settings
-            </button>
+        <!-- Footer -->
+        <div class="text-center mt-4">
+            <p class="text-white-50">
+                <i class="fas fa-shield-alt me-2"></i>
+                Powered by GenAI Hub | Secure Document Translation
+            </p>
         </div>
-
-        <h1 class="text-center text-primary mb-2">DocTranslator</h1>
-        <h2 class="text-center text-muted mb-4">Document Translation Service</h2>
-
-        <div class="translation-options">
-            <!-- File Selection -->
-            <div class="mb-3">
-                <label for="file">Select File to Translate:</label>
-                <input type="file" class="form-control" id="file" name="file" accept=".pptx,.docx,.pdf,.xlsx" onchange="validateFileInput()">
-                <small class="text-muted">* Supports PowerPoint (.pptx), Word (.docx), PDF (.pdf), Excel (.xlsx)</small>
-            </div>
-
-            <!-- Model Selection -->
-            <div class="mb-3">
-                <label for="model">Translation Model:</label>
-                <select class="form-select" id="model" name="model">
-                    <option value="claude-4-sonnet">Claude 4 Sonnet</option>
-                    <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
-                    <option value="claude-3-5-sonnet-v2">Claude 3.5 Sonnet V2</option>
-                    <option value="claude-3-5-haiku" selected>Claude 3.5 Haiku</option>
-                </select>
-            </div>
-
-            <!-- Language Selection -->
-            <div class="row mb-3">
-                <div class="col-6">
-                    <label for="sourceLang">Source Language:</label>
-                    <select class="form-select" id="sourceLang" name="source_lang" onchange="validateLanguageSelection()">
-                        <option value="en" selected>English</option>
-                        <option value="ja">Japanese</option>
-                        <option value="zh">Chinese</option>
-                        <option value="ko">Korean</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="es">Spanish</option>
-                        <option value="hi">Hindi</option>
-                    </select>
-                </div>
-                <div class="col-6">
-                    <label for="targetLang">Target Language:</label>
-                    <select class="form-select" id="targetLang" name="target_lang" onchange="validateLanguageSelection()">
-                        <option value="ja" selected>Japanese</option>
-                        <option value="en">English</option>
-                        <option value="zh">Chinese</option>
-                        <option value="ko">Korean</option>
-                        <option value="fr">French</option>
-                        <option value="de">German</option>
-                        <option value="es">Spanish</option>
-                        <option value="hi">Hindi</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- AI Instructions -->
-            <div class="mb-3">
-                <label for="aiInstruction">Additional AI Instructions:</label>
-                <textarea class="form-control" id="aiInstruction" name="ai_instruction" rows="3" placeholder="Optional: Provide additional instructions for the AI translator"></textarea>
-            </div>
-
-            <!-- Start Translation Button -->
-            <div class="mb-3">
-                <button type="button" class="btn btn-primary w-100" id="submitButton" onclick="uploadFile()" disabled>Start Translation</button>
-            </div>
-        </div>
-
-        <!-- Progress Section -->
-        <div id="progressSection" class="mt-4" style="display: none;">
-            <div class="progress mb-3">
-                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                    <span id="progressPercentage">0%</span>
-                </div>
-            </div>
-            <p id="progressText" class="text-center">Preparing translation...</p>
-            <div class="text-center">
-                <button id="cancelButton" class="btn btn-danger" onclick="cancelTranslation()" style="display: none;">Cancel Translation</button>
-            </div>
-        </div>
-
-        <!-- Download Section -->
-        <div id="downloadSection" class="mt-4" style="display: none;">
-            <div id="downloadLinks" class="text-center"></div>
-        </div>
-
-        <!-- Alert Messages -->
-        <div id="alerts" class="mt-3"></div>
     </div>
 
     <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Settings</h2>
-                <span class="close-button">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="modalApiKey" class="form-label">GenAI HUB API Key</label>
-                    <input type="password" class="form-control" id="modalApiKey" placeholder="Update API Key">
-                    <button class="btn btn-secondary mt-2" onclick="updateApiKey()">Update API Key</button>
+    <div id="settingsModal" class="modal" style="display: none;">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog me-2"></i>API Settings
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white close-button"></button>
                 </div>
-                <div class="mb-3">
-                    <label for="modalApiUrl" class="form-label">GenAI HUB API URL</label>
-                    <input type="text" class="form-control" id="modalApiUrl" readonly>
+                <div class="modal-body">
+                    <form id="modalApiSettingsForm">
+                        <div class="form-group mb-3">
+                            <label for="modalApiKey" class="form-label">
+                                <i class="fas fa-key me-2"></i>GenAI Hub API Key
+                            </label>
+                            <input type="password" class="form-control" id="modalApiKey" name="modalApiKey"
+                                   placeholder="Enter your GenAI Hub API key">
+                            <div class="form-text">
+                                Leave empty to keep current API key unchanged.
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="modalApiUrl" class="form-label">
+                                <i class="fas fa-link me-2"></i>GenAI Hub API URL
+                            </label>
+                            <input type="url" class="form-control" id="modalApiUrl" name="modalApiUrl"
+                                   placeholder="https://your-genai-hub-url/v1/chat/completions">
+                            <div class="form-text">
+                                Current API endpoint URL for your GenAI Hub instance.
+                            </div>
+                        </div>
+                    </form>
                 </div>
-                <hr>
-                <div class="about-section">
-                    <h3>About</h3>
-                    <h4>DocTranslator</h4>
-                    <p>Document Translation Service using Claude AI</p>
-                    <p>© 2025 Document Translation Tool</p>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary close-button">Close</button>
+                    <button type="button" class="btn btn-primary" id="updateApiSettingsButton">
+                        <i class="fas fa-save me-2"></i>Update Settings
+                    </button>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('settingsModal').style.display='none'">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="text-center mt-4">
-        <p>© 2025 DocTranslator</p>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/app.js"></script>
 </body>
 </html>
