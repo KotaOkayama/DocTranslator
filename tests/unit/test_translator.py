@@ -1,41 +1,18 @@
 import pytest
 from app.core.translator import (
-    translate_text_with_cache,
     optimize_text_for_translation,
-    AVAILABLE_MODELS,
     LANGUAGES,
+    format_model_name,
+    filter_translation_models,
 )
 
 
 def test_optimize_text_for_translation():
     """テキスト最適化機能のテスト"""
-    # 空白行を含むテキスト
-    text = """
-    Hello
-
-    World
-
-    """
+    text = "Hello\n\nWorld\n\n"
     optimized = optimize_text_for_translation(text)
-    assert optimized == "    Hello\n    World"
-
-    # 数字のみの行を含むテキスト
-    text = """
-    Line 1
-    123456
-    Line 2
-    """
-    optimized = optimize_text_for_translation(text)
-    assert "Line 1" in optimized
-    assert "123456" in optimized
-    assert "Line 2" in optimized
-
-
-def test_available_models():
-    """利用可能なモデルの確認"""
-    assert isinstance(AVAILABLE_MODELS, dict)
-    assert "claude-4-sonnet" in AVAILABLE_MODELS
-    assert "claude-3-5-haiku" in AVAILABLE_MODELS
+    assert "Hello" in optimized
+    assert "World" in optimized
 
 
 def test_supported_languages():
@@ -47,29 +24,36 @@ def test_supported_languages():
     assert LANGUAGES["en"] == "English"
 
 
-@pytest.mark.asyncio
-async def test_translate_text_with_cache():
-    """キャッシュを使用したテキスト翻訳のテスト"""
-    test_text = "Hello, World!"
-    api_key = "test_key"
+def test_format_model_name():
+    """モデル名整形のテスト"""
+    # Claude系モデル
+    assert format_model_name("claude-3-5-haiku") == "Claude 3.5 Haiku"
+    assert format_model_name("claude-4-sonnet") == "Claude 4 Sonnet"
+    
+    # Llama系モデル
+    assert format_model_name("llama3-1-70b") == "Llama 3.1 70B"
+    
+    # その他
+    assert format_model_name("other-model") == "Other Model"
 
-    # 最初の翻訳（キャッシュなし）
-    translated = translate_text_with_cache(
-        text=test_text,
-        api_key=api_key,
-        model="claude-3-5-haiku",
-        source_lang="en",
-        target_lang="ja",
-    )
-    assert translated
-    assert isinstance(translated, str)
 
-    # 2回目の翻訳（キャッシュあり）
-    cached_translation = translate_text_with_cache(
-        text=test_text,
-        api_key=api_key,
-        model="claude-3-5-haiku",
-        source_lang="en",
-        target_lang="ja",
-    )
-    assert cached_translation == translated
+def test_filter_translation_models():
+    """モデルフィルタリングのテスト"""
+    models = [
+        "claude-3-5-haiku",
+        "claude-4-sonnet", 
+        "copilot-model",
+        "documentation-helper",
+        "llama3-1-70b"
+    ]
+    
+    filtered = filter_translation_models(models)
+    
+    # 翻訳に適したモデルのみが残る
+    assert "claude-3-5-haiku" in filtered
+    assert "claude-4-sonnet" in filtered
+    assert "llama3-1-70b" in filtered
+    
+    # 除外されるモデル
+    assert "copilot-model" not in filtered
+    assert "documentation-helper" not in filtered

@@ -1,6 +1,5 @@
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
 
 
 def test_read_health(client):
@@ -21,7 +20,6 @@ def test_get_models(client):
     data = response.json()
     assert "models" in data
     assert isinstance(data["models"], dict)
-    assert "claude-4-sonnet" in data["models"]
 
 
 def test_get_languages(client):
@@ -33,3 +31,12 @@ def test_get_languages(client):
     assert isinstance(data["languages"], dict)
     assert "ja" in data["languages"]
     assert "en" in data["languages"]
+
+
+def test_get_status(client):
+    """ステータス取得のテスト"""
+    response = client.get("/api/status")
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+    assert data["status"] == "ok"
