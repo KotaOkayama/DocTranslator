@@ -12,7 +12,7 @@ DocTranslator is a web-based document translation service that uses the GenAI HU
 ## 🚀 Features
 
 - 📄 **Multi-format Support**: Translate PPTX, DOCX, XLSX and PDF files
-- 🤖 **AI-Powered**: Multiple Claude models (Claude 4 Sonnet, 3.7 Sonnet, 3.5 Sonnet V2, 3.5 Haiku)
+- 🤖 **AI-Powered**: Models Available on GenAI HUB
 - 🌐 **Web Interface**: Clean and responsive UI with real-time progress display
 - ⚡ **PDF Processing**: LibreOffice integration for high-quality PDF conversion
 - 🐳 **Containerized**: Easy development and deployment with Docker
