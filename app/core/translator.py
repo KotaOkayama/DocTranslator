@@ -213,15 +213,26 @@ def fetch_available_models() -> Dict[str, str]:
         result = response.json()
         logger.debug(f"API レスポンス: {result}")
         
-        # GenAI Hubのレスポンスからcontentフィールドを取得
-        if "content" not in result:
-            logger.error(f"API レスポンスに 'content' フィールドがありません: {result}")
+        # レスポンス形式を判定して適切にパース
+        models_list = None
+        
+        # 新しい形式（OpenAI互換）: data フィールドを使用
+        if "data" in result and isinstance(result["data"], list):
+            logger.debug("OpenAI互換形式のレスポンスを検出")
+            models_list = [model["id"] for model in result["data"] if "id" in model]
+        
+        # 旧形式: content フィールドを使用（後方互換性のため）
+        elif "content" in result and isinstance(result["content"], list):
+            logger.debug("旧形式のレスポンスを検出")
+            models_list = result["content"]
+        
+        # どちらの形式でもない場合
+        else:
+            logger.error(f"未知のレスポンス形式: {result}")
             raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
         
-        models_list = result["content"]
-        
         if not isinstance(models_list, list):
-            logger.error(f"'content' フィールドがリスト形式ではありません: {type(models_list)}")
+            logger.error(f"モデル一覧がリスト形式ではありません: {type(models_list)}")
             raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
         
         logger.info(f"取得したモデル数: {len(models_list)}")
@@ -257,6 +268,7 @@ def fetch_available_models() -> Dict[str, str]:
     except Exception as e:
         logger.error(f"モデル一覧取得エラー: {e}")
         raise ValueError(f"モデル一覧の取得に失敗しました: {str(e)}")
+
 
 
 # フォールバック用のデフォルトモデル（API呼び出しが失敗した場合に使用）
