@@ -146,8 +146,14 @@ RUN echo '#!/bin/bash\n\
 set -e\n\
 echo "Starting DocTranslator in Production Mode..."\n\
 echo "Starting Xvfb..."\n\
-Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX &\n\
-sleep 3\n\
+if pgrep -x "Xvfb" > /dev/null; then\n\
+    echo "Xvfb is already running"\n\
+else\n\
+    rm -f /tmp/.X99-lock\n\
+    Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX &\n\
+    sleep 3\n\
+    echo "Xvfb started"\n\
+fi\n\
 echo "Testing LibreOffice..."\n\
 libreoffice --headless --version || echo "LibreOffice test failed"\n\
 echo "Testing PyMuPDF..."\n\
