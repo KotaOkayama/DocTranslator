@@ -89,10 +89,10 @@ def api_settings_exist() -> bool:
 
 def validate_api_settings() -> bool:
     """
-    API設定の妥当性を検証します
+    Validate API settings
     
     Returns:
-        設定が有効かどうか
+        True if settings are valid
     """
     try:
         api_key = get_api_key()
@@ -102,11 +102,11 @@ def validate_api_settings() -> bool:
             logger.debug("API key or URL is missing")
             return False
             
-        # 簡単な接続テスト
+        # Simple connection test
         import requests
         headers = {"Authorization": f"Bearer {api_key}"}
         
-        # モデル一覧エンドポイントをテスト
+        # Test models endpoint
         if api_url.endswith("/chat/completions"):
             test_url = api_url.replace("/chat/completions", "/models")
         elif api_url.endswith("/v1/chat/completions"):
@@ -123,46 +123,46 @@ def validate_api_settings() -> bool:
         return is_valid
         
     except Exception as e:
-        logger.error(f"API設定検証エラー: {e}")
+        logger.error(f"API settings validation error: {e}")
         return False
 
 def clear_api_settings() -> bool:
     """
-    API設定をクリアします
+    Clear API settings
     
     Returns:
-        クリアに成功した場合はTrue、失敗した場合はFalse
+        True if successful, False otherwise
     """
     try:
-        # 環境変数から削除
+        # Remove from environment variables
         if "GENAI_HUB_API_KEY" in os.environ:
             del os.environ["GENAI_HUB_API_KEY"]
         if "GENAI_HUB_API_URL" in os.environ:
             del os.environ["GENAI_HUB_API_URL"]
         
-        # .envファイルを削除または空にする
+        # Delete or empty .env file
         if ENV_FILE.exists():
             ENV_FILE.unlink()
             logger.info(f"Deleted .env file: {ENV_FILE}")
         
-        logger.info("API設定をクリアしました")
+        logger.info("API settings cleared successfully")
         return True
         
     except Exception as e:
-        logger.error(f"API設定のクリアに失敗しました: {e}")
+        logger.error(f"Failed to clear API settings: {e}")
         return False
 
 def get_config_info() -> dict:
     """
-    現在の設定情報を取得します（デバッグ用）
+    Get current configuration information (for debugging)
     
     Returns:
-        設定情報の辞書
+        Configuration information dictionary
     """
     api_key = get_api_key()
     api_url = get_api_url()
     
-    # セキュリティのためAPIキーをマスク
+    # Mask API key for security
     masked_key = ""
     if api_key:
         if len(api_key) > 8:
@@ -184,37 +184,37 @@ def get_config_info() -> dict:
 
 def update_api_settings(api_key: str = None, api_url: str = None) -> bool:
     """
-    既存のAPI設定を部分的に更新します
+    Partially update existing API settings
     
     Args:
-        api_key: 新しいAPIキー（Noneの場合は既存の値を保持）
-        api_url: 新しいAPI URL（Noneの場合は既存の値を保持）
+        api_key: New API key (None to keep existing value)
+        api_url: New API URL (None to keep existing value)
         
     Returns:
-        更新に成功した場合はTrue、失敗した場合はFalse
+        True if successful, False otherwise
     """
     try:
-        # 現在の設定を取得
+        # Get current settings
         current_api_key = get_api_key()
         current_api_url = get_api_url()
         
-        # 新しい値または既存の値を使用
+        # Use new values or existing values
         final_api_key = api_key if api_key is not None else current_api_key
         final_api_url = api_url if api_url is not None else current_api_url
         
-        # 設定を保存
+        # Save settings
         return save_api_settings(final_api_key, final_api_url)
         
     except Exception as e:
-        logger.error(f"API設定の更新に失敗しました: {e}")
+        logger.error(f"Failed to update API settings: {e}")
         return False
 
 def test_api_connection() -> tuple[bool, str]:
     """
-    API接続をテストします
+    Test API connection
     
     Returns:
-        (成功/失敗, メッセージ)
+        (success/failure, message)
     """
     try:
         api_key = get_api_key()
@@ -229,7 +229,7 @@ def test_api_connection() -> tuple[bool, str]:
         import requests
         headers = {"Authorization": f"Bearer {api_key}"}
         
-        # モデル一覧エンドポイントをテスト
+        # Test models endpoint
         if api_url.endswith("/chat/completions"):
             test_url = api_url.replace("/chat/completions", "/models")
         elif api_url.endswith("/v1/chat/completions"):
@@ -260,7 +260,37 @@ def test_api_connection() -> tuple[bool, str]:
     except Exception as e:
         return False, f"Connection test failed: {str(e)}"
 
-# エクスポートする関数
+def get_default_model() -> str:
+    """
+    Automatically select the first available model
+    
+    Returns:
+        Default model name
+    """
+    try:
+        # Check if API settings exist
+        if not api_settings_exist():
+            logger.warning("API settings not found, using fallback model")
+            return "claude-3-5-haiku"
+        
+        # Get available models
+        from app.core.translator import fetch_available_models
+        models = fetch_available_models()
+        
+        if models:
+            # Return the first model in alphabetical order
+            default_model = sorted(models.keys())[0]
+            logger.info(f"Auto-selected default model: {default_model}")
+            return default_model
+        else:
+            logger.warning("No available models found. Using fallback model")
+            return "claude-3-5-haiku"
+            
+    except Exception as e:
+        logger.error(f"Error getting default model: {e}")
+        return "claude-3-5-haiku"  # Fallback on error
+
+# Export functions
 __all__ = [
     "save_api_key",
     "save_api_settings", 
@@ -273,5 +303,6 @@ __all__ = [
     "get_config_info",
     "load_env_file",
     "update_api_settings",
-    "test_api_connection"
+    "test_api_connection",
+    "get_default_model",
 ]

@@ -57,7 +57,7 @@ def get_api_key():
     from app.config import get_api_key
     return get_api_key()
 
-# 翻訳に適さないモデルのフィルタリング用キーワード
+# Keywords to filter out models not suitable for translation
 EXCLUDED_MODEL_KEYWORDS = [
     "copilot",
     "documentation", 
@@ -71,41 +71,41 @@ EXCLUDED_MODEL_KEYWORDS = [
 
 def filter_translation_models(models: List[str]) -> List[str]:
     """
-    翻訳に適したモデルのみをフィルタリングします
+    Filter models suitable for translation
     
     Args:
-        models: モデル名のリスト
+        models: List of model names
         
     Returns:
-        翻訳に適したモデル名のリスト
+        List of model names suitable for translation
     """
     filtered_models = []
     
     for model in models:
         model_lower = model.lower()
         
-        # 除外キーワードが含まれているかチェック
+        # Check if excluded keywords are present
         should_exclude = any(keyword in model_lower for keyword in EXCLUDED_MODEL_KEYWORDS)
         
         if not should_exclude:
             filtered_models.append(model)
     
-    logger.info(f"モデルフィルタリング結果: {len(models)} -> {len(filtered_models)} モデル")
-    logger.debug(f"除外されたモデル: {set(models) - set(filtered_models)}")
+    logger.info(f"Model filtering result: {len(models)} -> {len(filtered_models)} models")
+    logger.debug(f"Excluded models: {set(models) - set(filtered_models)}")
     
     return filtered_models
 
 def format_model_name(model_name: str) -> str:
     """
-    GenAI Hub特有のモデル名を適切に整形します
+    Format GenAI Hub specific model names appropriately
     
     Args:
-        model_name: 元のモデル名
+        model_name: Original model name
         
     Returns:
-        整形されたモデル名
+        Formatted model name
     """
-    # Claude系モデルの整形
+    # Format Claude models
     if model_name.startswith("claude-"):
         # claude-3-5-sonnet-v2 -> Claude 3.5 Sonnet V2
         # claude-4-sonnet -> Claude 4 Sonnet
@@ -126,7 +126,7 @@ def format_model_name(model_name: str) -> str:
             
             return formatted
     
-    # Llama系モデルの整形
+    # Format Llama models
     elif model_name.startswith("llama"):
         # llama3-1-70b -> Llama 3.1 70B
         # llama4-maverick-17b -> Llama 4 Maverick 17B
@@ -136,58 +136,58 @@ def format_model_name(model_name: str) -> str:
             
             formatted = f"Llama {version_part}"
             
-            # バージョン番号の処理
+            # Process version number
             if len(parts) > 1 and parts[1].isdigit():
                 formatted += f".{parts[1]}"
                 remaining_parts = parts[2:]
             else:
                 remaining_parts = parts[1:]
             
-            # 残りの部分を処理
+            # Process remaining parts
             for part in remaining_parts:
                 if part.endswith("b") and part[:-1].isdigit():
-                    # サイズ情報 (70b -> 70B)
+                    # Size information (70b -> 70B)
                     formatted += f" {part.upper()}"
                 else:
-                    # その他の情報 (maverick, scout等)
+                    # Other information (maverick, scout, etc.)
                     formatted += f" {part.title()}"
             
             return formatted
     
-    # その他のモデルは最初の文字を大文字にして返す
+    # Capitalize first letter for other models
     return model_name.replace("-", " ").title()
 
 def fetch_available_models() -> Dict[str, str]:
     """
-    GenAI HUBから利用可能なモデル一覧を取得します
+    Fetch available models from GenAI HUB
     
     Returns:
-        モデル辞書 {model_id: display_name}
+        Model dictionary {model_id: display_name}
         
     Raises:
-        ValueError: API呼び出しに失敗した場合
-        ConnectionError: 接続に失敗した場合
+        ValueError: If API call fails
+        ConnectionError: If connection fails
     """
-    logger.info("GenAI HUBからモデル一覧を取得しています...")
+    logger.info("Fetching models from GenAI HUB...")
     
-    # API設定を取得
+    # Get API settings
     api_key = get_api_key()
     api_url = get_api_url()
     
     if not api_key:
-        raise ValueError("API キーが設定されていません。設定画面でAPI キーを設定してください。")
+        raise ValueError("API key is not set. Please configure API key in settings.")
     
     if not api_url:
-        raise ValueError("API URLが設定されていません。設定画面でAPI URLを設定してください。")
+        raise ValueError("API URL is not set. Please configure API URL in settings.")
     
-    # モデル一覧取得用のエンドポイントを構築
-    # チャットエンドポイントからモデル一覧エンドポイントに変換
+    # Build models endpoint URL
+    # Convert chat endpoint to models endpoint
     if api_url.endswith("/chat/completions"):
         models_url = api_url.replace("/chat/completions", "/models")
     elif api_url.endswith("/v1/chat/completions"):
         models_url = api_url.replace("/v1/chat/completions", "/v1/models")
     else:
-        # フォールバック: URLの末尾に/modelsを追加
+        # Fallback: append /models to URL
         models_url = api_url.rstrip("/") + "/models"
     
     headers = {
@@ -196,103 +196,89 @@ def fetch_available_models() -> Dict[str, str]:
     }
     
     try:
-        logger.debug(f"モデル一覧取得URL: {models_url}")
+        logger.debug(f"Models fetch URL: {models_url}")
         response = requests.get(
             models_url,
             headers=headers,
             timeout=30
         )
         
-        logger.debug(f"API レスポンスステータス: {response.status_code}")
+        logger.debug(f"API response status: {response.status_code}")
         
         if response.status_code != 200:
-            logger.error(f"モデル一覧取得エラー: ステータスコード {response.status_code}")
-            logger.error(f"レスポンス: {response.text}")
-            raise ValueError(f"モデル一覧の取得に失敗しました。ステータスコード: {response.status_code}")
+            logger.error(f"Models fetch error: status code {response.status_code}")
+            logger.error(f"Response: {response.text}")
+            raise ValueError(f"Failed to fetch models. Status code: {response.status_code}")
         
         result = response.json()
-        logger.debug(f"API レスポンス: {result}")
+        logger.debug(f"API response: {result}")
         
-        # レスポンス形式を判定して適切にパース
+        # Determine response format and parse appropriately
         models_list = None
         
-        # 新しい形式（OpenAI互換）: data フィールドを使用
+        # New format (OpenAI compatible): uses data field
         if "data" in result and isinstance(result["data"], list):
-            logger.debug("OpenAI互換形式のレスポンスを検出")
+            logger.debug("Detected OpenAI compatible response format")
             models_list = [model["id"] for model in result["data"] if "id" in model]
         
-        # 旧形式: content フィールドを使用（後方互換性のため）
+        # Old format: uses content field (for backward compatibility)
         elif "content" in result and isinstance(result["content"], list):
-            logger.debug("旧形式のレスポンスを検出")
+            logger.debug("Detected old response format")
             models_list = result["content"]
         
-        # どちらの形式でもない場合
+        # Unknown format
         else:
-            logger.error(f"未知のレスポンス形式: {result}")
-            raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
+            logger.error(f"Unknown response format: {result}")
+            raise ValueError("Failed to fetch models. Invalid response format.")
         
         if not isinstance(models_list, list):
-            logger.error(f"モデル一覧がリスト形式ではありません: {type(models_list)}")
-            raise ValueError("モデル一覧の取得に失敗しました。レスポンス形式が不正です。")
+            logger.error(f"Models list is not a list: {type(models_list)}")
+            raise ValueError("Failed to fetch models. Invalid response format.")
         
-        logger.info(f"取得したモデル数: {len(models_list)}")
-        logger.debug(f"取得したモデル: {models_list}")
+        logger.info(f"Fetched models count: {len(models_list)}")
+        logger.debug(f"Fetched models: {models_list}")
         
-        # 翻訳に適したモデルのみをフィルタリング
+        # Filter models suitable for translation
         filtered_models = filter_translation_models(models_list)
         
         if not filtered_models:
-            logger.warning("翻訳に適したモデルが見つかりませんでした")
-            raise ValueError("翻訳に適したモデルが見つかりませんでした。")
+            logger.warning("No models suitable for translation found")
+            raise ValueError("No models suitable for translation found.")
         
-        # モデル辞書を作成し、アルファベット順にソート
+        # Create model dictionary and sort alphabetically
         models_dict = {}
         for model in filtered_models:
             display_name = format_model_name(model)
             models_dict[model] = display_name
         
-        # モデルIDでアルファベット順にソート
+        # Sort by model ID alphabetically
         sorted_models_dict = dict(sorted(models_dict.items()))
         
-        logger.info(f"利用可能な翻訳モデル（アルファベット順）: {list(sorted_models_dict.keys())}")
+        logger.info(f"Available translation models (alphabetical order): {list(sorted_models_dict.keys())}")
         
         return sorted_models_dict
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"モデル一覧取得リクエストエラー: {e}")
-        raise ConnectionError(f"GenAI HUBへの接続に失敗しました: {str(e)}")
+        logger.error(f"Models fetch request error: {e}")
+        raise ConnectionError(f"Failed to connect to GenAI HUB: {str(e)}")
     except json.JSONDecodeError as e:
-        logger.error(f"JSON デコードエラー: {e}")
-        logger.error(f"レスポンス: {response.text if 'response' in locals() else 'なし'}")
-        raise ValueError(f"モデル一覧の取得に失敗しました。レスポンスの解析エラー: {str(e)}")
+        logger.error(f"JSON decode error: {e}")
+        logger.error(f"Response: {response.text if 'response' in locals() else 'None'}")
+        raise ValueError(f"Failed to fetch models. Response parse error: {str(e)}")
     except Exception as e:
-        logger.error(f"モデル一覧取得エラー: {e}")
-        raise ValueError(f"モデル一覧の取得に失敗しました: {str(e)}")
-
-
-
-# フォールバック用のデフォルトモデル（API呼び出しが失敗した場合に使用）
-# DEFAULT_MODELS = {
-#     "claude-3-5-haiku": "Claude 3.5 Haiku",
-#     "claude-3-5-sonnet-v2": "Claude 3.5 Sonnet V2", 
-#     "claude-3-7-sonnet": "Claude 3.7 Sonnet",
-#     "claude-4-sonnet": "Claude 4 Sonnet",
-# }
-
-# アルファベット順にソート
-# DEFAULT_MODELS = dict(sorted(DEFAULT_MODELS.items()))
+        logger.error(f"Models fetch error: {e}")
+        raise ValueError(f"Failed to fetch models: {str(e)}")
 
 def get_available_models() -> Dict[str, str]:
     """
-    利用可能なモデル一覧を取得します（フォールバック無し）
+    Get available models (no fallback)
     
     Returns:
-        モデル辞書 {model_id: display_name}
+        Model dictionary {model_id: display_name}
     Raises:
-        ValueError: API呼び出しに失敗した場合
-        ConnectionError: 接続に失敗した場合
+        ValueError: If API call fails
+        ConnectionError: If connection fails
     """
-
     return fetch_available_models()
 
 # Language options
@@ -333,83 +319,87 @@ def save_translation_cache(cache_file: str = "translation_cache.json"):
         logger.error(f"Failed to save cache: {e}")
 
 def load_translation_cache(cache_file: str = "translation_cache.json"):
-    """Loading translation cache from file"""
+    """Load translation cache from file"""
     global TRANSLATION_CACHE
     try:
         if os.path.exists(cache_file):
             with open(cache_file, "r", encoding="utf-8") as f:
                 TRANSLATION_CACHE = json.load(f)
-            logger.info(
-                f"翻訳キャッシュをロードしました: {len(TRANSLATION_CACHE)} entries"
-            )
+            logger.info(f"Translation cache loaded: {len(TRANSLATION_CACHE)} entries")
     except Exception as e:
-        logger.error(f"キャッシュのロードに失敗しました: {e}")
+        logger.error(f"Failed to load cache: {e}")
         TRANSLATION_CACHE = {}
 
-# キャッシュをロード
+# Load cache
 load_translation_cache()
 
 def translate_text_with_genai_hub(
     text: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     ai_instruction: str = "",
 ) -> str:
     """
-    GenAI Hub API を使用してテキストを翻訳します。
+    Translate text using GenAI Hub API.
     """
     if not text.strip():
         return ""
+    
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+        logger.debug(f"Using default model: {model}")
 
-    # 環境変数からAPI キーとURLを取得
+    # Get API key and URL from environment variables
     if not api_key:
         api_key = os.environ.get("GENAI_HUB_API_KEY")
 
-    # API URLを環境変数から取得
+    # Get API URL from environment variable
     api_url = os.environ.get("GENAI_HUB_API_URL")
 
     if not api_key:
         raise ValueError(
-            "The API key is not set. Please check the environment variable GENAI_HUB_API_KEY."
+            "API key is not set. Please check environment variable GENAI_HUB_API_KEY."
         )
     
     if not api_url:
         raise ValueError(
-            "The API URL is not set. Please check the environment variable GENAI_HUB_API_URL."
+            "API URL is not set. Please check environment variable GENAI_HUB_API_URL."
         )
 
-    # Log only the first and last few characters of the API key (for security purposes)
+    # Log only first and last few characters of API key (for security)
     masked_api_key = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "****"
     logger.info(
-        f"翻訳: {source_lang} -> {target_lang}, モデル: {model}, API キー: {masked_api_key}, API URL: {api_url}"
+        f"Translation: {source_lang} -> {target_lang}, Model: {model}, API Key: {masked_api_key}, API URL: {api_url}"
     )
-    logger.debug(f"翻訳テキスト: {text[:100]}...")
+    logger.debug(f"Translation text: {text[:100]}...")
 
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
-    # Create a prompt that includes translation instructions
-    prompt = f"""以下のテキストを {LANGUAGES.get(source_lang, source_lang)} から {LANGUAGES.get(target_lang, target_lang)} に翻訳してください。
-元のテキストのフォーマットを維持し、翻訳のみを行ってください。
-翻訳以外の説明や注釈は不要です。
-改行やスペースなどの書式も可能な限り維持してください。
+    # Create prompt with translation instructions
+    prompt = f"""Translate the following text from {LANGUAGES.get(source_lang, source_lang)} to {LANGUAGES.get(target_lang, target_lang)}.
+Maintain the original text format and only perform translation.
+No explanations or annotations other than translation are needed.
+Preserve formatting such as line breaks and spaces as much as possible.
 """
 
-    # 補足指示があれば追加
+    # Add supplementary instructions if provided
     if ai_instruction:
-        prompt += f"\n補足指示: {ai_instruction}\n"
+        prompt += f"\nSupplementary instructions: {ai_instruction}\n"
 
     prompt += f"""
-テキスト:
+Text:
 {text}
 
-翻訳:"""
+Translation:"""
 
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,  # Set a low temperature for consistent translation
+        "temperature": 0.1,  # Set low temperature for consistent translation
         "max_tokens": 4000,
     }
 
@@ -419,7 +409,7 @@ def translate_text_with_genai_hub(
 
     while retry_count <= max_retries:
         try:
-            logger.debug(f"API リクエスト送信: {api_url}")
+            logger.debug(f"Sending API request: {api_url}")
             response = requests.post(
                 api_url,
                 headers=headers,
@@ -427,162 +417,167 @@ def translate_text_with_genai_hub(
                 timeout=TRANSLATION_CONFIG["api_timeout"],
             )
 
-            # レスポンスの詳細をログに記録
-            logger.debug(f"API レスポンスステータス: {response.status_code}")
+            # Log response details
+            logger.debug(f"API response status: {response.status_code}")
 
-            # エラーチェック
+            # Error check
             if response.status_code != 200:
-                logger.error(f"API エラー: ステータスコード {response.status_code}")
-                logger.error(f"レスポンス: {response.text}")
+                logger.error(f"API error: status code {response.status_code}")
+                logger.error(f"Response: {response.text}")
 
                 if retry_count < max_retries:
                     retry_count += 1
-                    wait_time = 2**retry_count  # 指数バックオフ
+                    wait_time = 2**retry_count  # Exponential backoff
                     logger.info(
-                        f"リトライ {retry_count}/{max_retries} を {wait_time} 秒後に実行します"
+                        f"Retry {retry_count}/{max_retries} in {wait_time} seconds"
                     )
                     time.sleep(wait_time)
                     continue
 
-                return f"[翻訳エラー: API ステータスコード {response.status_code}]"
+                return f"[Translation error: API status code {response.status_code}]"
 
             response.raise_for_status()
 
             result = response.json()
             if "choices" not in result or len(result["choices"]) == 0:
-                logger.error(f"API レスポンスに 'choices' がありません: {result}")
+                logger.error(f"API response missing 'choices': {result}")
 
                 if retry_count < max_retries:
                     retry_count += 1
                     wait_time = 2**retry_count
                     logger.info(
-                        f"リトライ {retry_count}/{max_retries} を {wait_time} 秒後に実行します"
+                        f"Retry {retry_count}/{max_retries} in {wait_time} seconds"
                     )
                     time.sleep(wait_time)
                     continue
 
-                return "[翻訳エラー: 無効なレスポンス]"
+                return "[Translation error: Invalid response]"
 
             translated_text = result["choices"][0]["message"]["content"].strip()
 
-            # "翻訳:" などのプレフィックスがある場合は削除
-            if "翻訳:" in translated_text:
-                translated_text = translated_text.split("翻訳:", 1)[1].strip()
+            # Remove prefix like "Translation:" if present
+            if "Translation:" in translated_text:
+                translated_text = translated_text.split("Translation:", 1)[1].strip()
 
-            logger.debug(f"翻訳結果: {translated_text[:100]}...")
+            logger.debug(f"Translation result: {translated_text[:100]}...")
             return translated_text
 
         except requests.exceptions.RequestException as e:
-            logger.error(f"API リクエストエラー: {e}")
+            logger.error(f"API request error: {e}")
 
             if retry_count < max_retries:
                 retry_count += 1
                 wait_time = 2**retry_count
                 logger.info(
-                    f"リトライ {retry_count}/{max_retries} を {wait_time} 秒後に実行します"
+                    f"Retry {retry_count}/{max_retries} in {wait_time} seconds"
                 )
                 time.sleep(wait_time)
                 continue
 
-            return f"[翻訳エラー: リクエスト失敗 - {str(e)}]"
+            return f"[Translation error: Request failed - {str(e)}]"
 
         except json.JSONDecodeError as e:
-            logger.error(f"JSON デコードエラー: {e}")
+            logger.error(f"JSON decode error: {e}")
             logger.error(
-                f"レスポンス: {response.text if 'response' in locals() else 'なし'}"
+                f"Response: {response.text if 'response' in locals() else 'None'}"
             )
 
             if retry_count < max_retries:
                 retry_count += 1
                 wait_time = 2**retry_count
                 logger.info(
-                    f"リトライ {retry_count}/{max_retries} を {wait_time} 秒後に実行します"
+                    f"Retry {retry_count}/{max_retries} in {wait_time} seconds"
                 )
                 time.sleep(wait_time)
                 continue
 
-            return "[翻訳エラー: 無効な JSON レスポンス]"
+            return "[Translation error: Invalid JSON response]"
         except Exception as e:
-            logger.error(f"翻訳エラー: {e}")
+            logger.error(f"Translation error: {e}")
             logger.error(
-                f"レスポンス: {response.text if 'response' in locals() else 'なし'}"
+                f"Response: {response.text if 'response' in locals() else 'None'}"
             )
 
             if retry_count < max_retries:
                 retry_count += 1
                 wait_time = 2**retry_count
                 logger.info(
-                    f"リトライ {retry_count}/{max_retries} を {wait_time} 秒後に実行します"
+                    f"Retry {retry_count}/{max_retries} in {wait_time} seconds"
                 )
                 time.sleep(wait_time)
                 continue
 
-            return f"[翻訳エラー: {str(e)}]"
+            return f"[Translation error: {str(e)}]"
 
 def translate_text_with_cache(
     text: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     ai_instruction: str = "",
 ) -> str:
     """
-    キャッシュを使用してテキストを翻訳します。
+    Translate text using cache.
 
     Args:
-        text: 翻訳するテキスト
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        ai_instruction: AIへの補足指示
+        text: Text to translate
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        ai_instruction: Supplementary instructions for AI
 
     Returns:
-        翻訳されたテキスト
+        Translated text
     """
     if not text.strip():
         return ""
+    
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
 
-    # キャッシュキーを作成（補足指示も含める）
+    # Create cache key (including supplementary instructions)
     cache_key = f"{text}|{model}|{source_lang}|{target_lang}|{ai_instruction}"
 
-    # キャッシュをチェック
+    # Check cache
     if cache_key in TRANSLATION_CACHE:
-        logger.debug(f"キャッシュから翻訳を取得: {text[:30]}...")
+        logger.debug(f"Retrieved translation from cache: {text[:30]}...")
         return TRANSLATION_CACHE[cache_key]
 
-    # キャッシュにない場合は翻訳
+    # Translate if not in cache
     translated = translate_text_with_genai_hub(
         text, api_key, model, source_lang, target_lang, ai_instruction
     )
 
-    # キャッシュに保存
+    # Save to cache
     TRANSLATION_CACHE[cache_key] = translated
 
     return translated
 
 def optimize_text_for_translation(text: str) -> str:
     """
-    翻訳のためにテキストを最適化します。
+    Optimize text for translation.
 
     Args:
-        text: 最適化するテキスト
+        text: Text to optimize
 
     Returns:
-        最適化されたテキスト
+        Optimized text
     """
-    # 空白行を削除
+    # Remove blank lines
     lines = [line for line in text.split("\n") if line.strip()]
 
-    # 数字や記号だけの行をスキップ
+    # Skip lines with only numbers or symbols
     filtered_lines = []
     for line in lines:
-        # 翻訳が必要なテキストかチェック（アルファベット、漢字、ひらがな、カタカナなどを含む）
+        # Check if text needs translation (contains alphabets, kanji, hiragana, katakana, etc.)
         if any(c.isalpha() for c in line):
             filtered_lines.append(line)
         else:
-            # 数字や記号だけの行はそのまま追加
+            # Add lines with only numbers or symbols as is
             filtered_lines.append(line)
 
     return "\n".join(filtered_lines)
@@ -595,27 +590,27 @@ def translate_dataframe(
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
     ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> pd.DataFrame:
     """
-    DataFrameのテキストを並列翻訳します。
+    Translate text in DataFrame in parallel.
 
     Args:
-        df: 翻訳するテキストを含むDataFrame
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
+        df: DataFrame containing text to translate
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        progress_callback: Callback function to report progress
+        ai_instruction: Supplementary instructions for AI
+        check_cancelled: Function to check cancellation status
 
     Returns:
-        翻訳されたテキストを含むDataFrame
+        DataFrame containing translated text
     """
-    logger.info(f"DataFrame 内のテキストを並列翻訳します: {len(df)} 項目")
+    logger.info(f"Translating text in DataFrame in parallel: {len(df)} items")
 
-    # テキストを最適化
+    # Optimize text
     if TRANSLATION_CONFIG["optimize_text"]:
         optimized_texts = [
             optimize_text_for_translation(text) for text in df["original_text"]
@@ -623,16 +618,16 @@ def translate_dataframe(
     else:
         optimized_texts = df["original_text"].tolist()
 
-    # 並列処理の設定
+    # Parallel processing settings
     max_workers = TRANSLATION_CONFIG.get("parallel_workers", 4)
     batch_size = TRANSLATION_CONFIG.get("batch_size", 5)
 
-    # 進捗状況を追跡するためのカウンター
+    # Counter to track progress
     total_items = len(df)
     completed_items = 0
     translations = [""] * total_items
 
-    # スレッドセーフな進捗更新関数
+    # Thread-safe progress update function
     def update_progress(count=1):
         nonlocal completed_items
         completed_items += count
@@ -641,48 +636,48 @@ def translate_dataframe(
                 progress = 0.3 + (completed_items / total_items * 0.5)
                 progress_callback(min(progress, 0.8))
             except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
+                logger.warning(f"Progress callback error: {e}")
 
-    # 単一テキスト翻訳のラッパー関数
+    # Wrapper function for single text translation
     def translate_single_text(index, text):
         try:
-            # 中止チェック
+            # Check cancellation
             if check_cancelled and check_cancelled():
-                logger.info(f"翻訳が中止されました (項目 {index+1})")
-                return index, "[翻訳中止]"
+                logger.info(f"Translation cancelled (item {index+1})")
+                return index, "[Translation cancelled]"
 
             translated_text = translate_text_with_cache(
                 text, api_key, model, source_lang, target_lang, ai_instruction
             )
             return index, translated_text
         except Exception as e:
-            logger.error(f"テキスト翻訳エラー (項目 {index+1}): {e}")
-            return index, f"[翻訳エラー: {str(e)}]"
+            logger.error(f"Text translation error (item {index+1}): {e}")
+            return index, f"[Translation error: {str(e)}]"
 
-    # バッチ処理を使用した並列翻訳
+    # Parallel translation using batch processing
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # バッチごとに処理
+        # Process by batch
         for batch_start in range(0, total_items, batch_size):
-            # 中止チェック
+            # Check cancellation
             if check_cancelled and check_cancelled():
-                logger.info("翻訳が中止されました")
+                logger.info("Translation cancelled")
                 break
 
             batch_end = min(batch_start + batch_size, total_items)
             batch_texts = optimized_texts[batch_start:batch_end]
             batch_indices = list(range(batch_start, batch_end))
 
-            # バッチの翻訳タスクを送信
+            # Submit batch translation tasks
             batch_futures = [
                 executor.submit(translate_single_text, index, text)
                 for index, text in zip(batch_indices, batch_texts)
             ]
 
-            # 結果を収集
+            # Collect results
             for future in concurrent.futures.as_completed(batch_futures):
-                # 中止チェック
+                # Check cancellation
                 if check_cancelled and check_cancelled():
-                    logger.info("翻訳が中止されました")
+                    logger.info("Translation cancelled")
                     break
 
                 try:
@@ -690,154 +685,154 @@ def translate_dataframe(
                     translations[index] = translated_text
                     update_progress()
                 except Exception as e:
-                    logger.error(f"バッチ処理エラー: {e}")
+                    logger.error(f"Batch processing error: {e}")
 
-    # 翻訳結果をDataFrameに追加
+    # Add translation results to DataFrame
     df["translated_text"] = translations
 
-    logger.info(f"並列翻訳完了: {len(df)} 項目")
+    logger.info(f"Parallel translation complete: {len(df)} items")
 
     if progress_callback:
         try:
-            progress_callback(0.8)  # 翻訳完了
+            progress_callback(0.8)  # Translation complete
         except Exception as e:
-            logger.warning(f"進捗コールバックエラー: {e}")
+            logger.warning(f"Progress callback error: {e}")
 
     return df
 
 def save_text_files(df: pd.DataFrame, output_dir: str, base_filename: str) -> tuple:
     """
-    抽出したテキストと翻訳したテキストをファイルに保存します。
+    Save extracted and translated text to files.
 
     Args:
-        df: テキストデータを含む DataFrame
-        output_dir: 出力ディレクトリ
-        base_filename: 基本ファイル名
+        df: DataFrame containing text data
+        output_dir: Output directory
+        base_filename: Base filename
 
     Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+        (extracted text file path, translated text file path)
     """
     logger.info(
-        f"テキストファイルを保存しています: ディレクトリ {output_dir}, ベース名 {base_filename}"
+        f"Saving text files: directory {output_dir}, base name {base_filename}"
     )
 
-    # 出力ディレクトリが存在しない場合は作成
+    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
-    # ファイル名を生成
+    # Generate filenames
     extracted_file = os.path.join(output_dir, f"{base_filename}_extracted.txt")
     translated_file = os.path.join(output_dir, f"{base_filename}_translated.txt")
 
-    # 抽出テキストを保存
+    # Save extracted text
     with open(extracted_file, "w", encoding="utf-8") as f:
         for i, row in df.iterrows():
-            # ファイル形式に応じたフォーマット
+            # Format according to file type
             if "element_type" in row:
                 if row["element_type"] == "paragraph":
-                    f.write(f"=== 段落 {row.get('para_id', i) + 1} ===\n")
+                    f.write(f"=== Paragraph {row.get('para_id', i) + 1} ===\n")
                 elif row["element_type"] == "table_cell":
                     f.write(
-                        f"=== 表 {row.get('table_id', 0) + 1}, 行 {row.get('row_id', 0) + 1}, セル {row.get('cell_id', 0) + 1} ===\n"
+                        f"=== Table {row.get('table_id', 0) + 1}, Row {row.get('row_id', 0) + 1}, Cell {row.get('cell_id', 0) + 1} ===\n"
                     )
                 elif row["element_type"] == "pdf_text":
                     f.write(
-                        f"=== ページ {row.get('page_num', 0) + 1}, ブロック {row.get('block_num', 0) + 1}, 行 {row.get('line_num', 0) + 1} ===\n"
+                        f"=== Page {row.get('page_num', 0) + 1}, Block {row.get('block_num', 0) + 1}, Line {row.get('line_num', 0) + 1} ===\n"
                     )
-                elif row["element_type"] == "pdf_paragraph":  # 追加
+                elif row["element_type"] == "pdf_paragraph":
                     f.write(
-                        f"=== ページ {row.get('page_num', 0) + 1}, 段落 {row.get('para_num', 0) + 1} ===\n"
+                        f"=== Page {row.get('page_num', 0) + 1}, Paragraph {row.get('para_num', 0) + 1} ===\n"
                     )
             elif "slide_num" in row:
                 f.write(
-                    f"=== スライド {row['slide_num'] + 1}, 形状 {row['shape_id'] + 1} ===\n"
+                    f"=== Slide {row['slide_num'] + 1}, Shape {row['shape_id'] + 1} ===\n"
                 )
             else:
-                f.write(f"=== 項目 {i + 1} ===\n")
+                f.write(f"=== Item {i + 1} ===\n")
 
-            # 元のテキストを書き込み（この行が抜けていました）
+            # Write original text
             f.write(f"{row['original_text']}\n\n")
 
-            # ハイパーリンク情報があれば追加
+            # Add hyperlink information if present
             if "hyperlink" in row and row["hyperlink"]:
-                f.write(f"[ハイパーリンク: {row['hyperlink']}]\n\n")
+                f.write(f"[Hyperlink: {row['hyperlink']}]\n\n")
 
-    logger.info(f"抽出テキストを保存しました: {extracted_file}")
+    logger.info(f"Extracted text saved: {extracted_file}")
 
-    # 翻訳テキストを保存（'translated_text'列がある場合のみ）
+    # Save translated text (only if 'translated_text' column exists)
     if "translated_text" in df.columns:
-        # 翻訳テキストが空でないか確認
+        # Check if translated text is not empty
         if (
             not df["translated_text"].isna().all()
             and not (df["translated_text"] == "").all()
         ):
             with open(translated_file, "w", encoding="utf-8") as f:
                 for i, row in df.iterrows():
-                    # ファイル形式に応じたフォーマット
+                    # Format according to file type
                     if "element_type" in row:
                         if row["element_type"] == "paragraph":
-                            f.write(f"=== 段落 {row.get('para_id', i) + 1} ===\n")
+                            f.write(f"=== Paragraph {row.get('para_id', i) + 1} ===\n")
                         elif row["element_type"] == "table_cell":
                             f.write(
-                                f"=== 表 {row.get('table_id', 0) + 1}, 行 {row.get('row_id', 0) + 1}, セル {row.get('cell_id', 0) + 1} ===\n"
+                                f"=== Table {row.get('table_id', 0) + 1}, Row {row.get('row_id', 0) + 1}, Cell {row.get('cell_id', 0) + 1} ===\n"
                             )
                         elif row["element_type"] == "pdf_text":
                             f.write(
-                                f"=== ページ {row.get('page_num', 0) + 1}, ブロック {row.get('block_num', 0) + 1}, 行 {row.get('line_num', 0) + 1} ===\n"
+                                f"=== Page {row.get('page_num', 0) + 1}, Block {row.get('block_num', 0) + 1}, Line {row.get('line_num', 0) + 1} ===\n"
                             )
-                        elif row["element_type"] == "pdf_paragraph":  # 追加
+                        elif row["element_type"] == "pdf_paragraph":
                             f.write(
-                                f"=== ページ {row.get('page_num', 0) + 1}, 段落 {row.get('para_num', 0) + 1} ===\n"
+                                f"=== Page {row.get('page_num', 0) + 1}, Paragraph {row.get('para_num', 0) + 1} ===\n"
                             )
                     elif "slide_num" in row:
                         f.write(
-                            f"=== スライド {row['slide_num'] + 1}, 形状 {row['shape_id'] + 1} ===\n"
+                            f"=== Slide {row['slide_num'] + 1}, Shape {row['shape_id'] + 1} ===\n"
                         )
                     else:
-                        f.write(f"=== 項目 {i + 1} ===\n")
+                        f.write(f"=== Item {i + 1} ===\n")
 
-                    # 翻訳テキストがNoneまたは空文字列の場合は元のテキストを使用
+                    # Use original text if translated text is None or empty
                     text_to_write = (
                         row["translated_text"]
                         if pd.notna(row["translated_text"]) and row["translated_text"]
-                        else "[未翻訳]"
+                        else "[Not translated]"
                     )
                     f.write(f"{text_to_write}\n\n")
 
-                    # ハイパーリンク情報があれば追加
+                    # Add hyperlink information if present
                     if "hyperlink" in row and row["hyperlink"]:
-                        f.write(f"[ハイパーリンク: {row['hyperlink']}]\n\n")
+                        f.write(f"[Hyperlink: {row['hyperlink']}]\n\n")
 
-            logger.info(f"翻訳テキストを保存しました: {translated_file}")
+            logger.info(f"Translated text saved: {translated_file}")
             return extracted_file, translated_file
         else:
             logger.warning(
-                "翻訳テキストが空です。翻訳テキストファイルは保存されません。"
+                "Translated text is empty. Translated text file will not be saved."
             )
             return extracted_file, None
     else:
         logger.warning(
-            "DataFrame に 'translated_text' 列がありません。翻訳テキストは保存されません。"
+            "DataFrame does not have 'translated_text' column. Translated text will not be saved."
         )
         return extracted_file, None
 
 #
-# PPTX 処理関数
+# PPTX processing functions
 #
 
 def extract_text_from_pptx(
     pptx_path: str, progress_callback: Optional[Callable] = None
 ) -> pd.DataFrame:
     """
-    PPTX ファイルからテキストを抽出し、DataFrame として返します。
+    Extract text from PPTX file and return as DataFrame.
 
     Args:
-        pptx_path: PPTX ファイルのパス
-        progress_callback: 進捗を報告するコールバック関数
+        pptx_path: PPTX file path
+        progress_callback: Callback function to report progress
 
     Returns:
-        テキストデータを含む DataFrame
+        DataFrame containing text data
     """
-    logger.info(f"PPTX ファイル '{pptx_path}' からテキストを抽出しています...")
+    logger.info(f"Extracting text from PPTX file '{pptx_path}'...")
 
     try:
         from pptx import Presentation
@@ -846,26 +841,26 @@ def extract_text_from_pptx(
         text_data = []
 
         total_slides = len(prs.slides)
-        logger.info(f"スライド数: {total_slides}")
+        logger.info(f"Number of slides: {total_slides}")
 
-        # スライド番号、形状ID、元のテキストを保存
+        # Save slide number, shape ID, and original text
         for slide_num, slide in enumerate(prs.slides):
             if progress_callback:
                 try:
                     progress_callback(
                         slide_num / total_slides * 0.3
-                    )  # 抽出は全体の30%と想定
+                    )  # Extraction is 30% of total
                 except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
+                    logger.warning(f"Progress callback error: {e}")
 
             for shape_id, shape in enumerate(slide.shapes):
                 if hasattr(shape, "text") and shape.text.strip():
                     text = shape.text.strip()
                     logger.debug(
-                        f"スライド {slide_num+1}, 形状 {shape_id+1}: {text[:50]}..."
+                        f"Slide {slide_num+1}, Shape {shape_id+1}: {text[:50]}..."
                     )
 
-                    # ハイパーリンク情報を取得
+                    # Get hyperlink information
                     hyperlink = None
                     if hasattr(shape, "click_action") and hasattr(
                         shape.click_action, "hyperlink"
@@ -885,26 +880,26 @@ def extract_text_from_pptx(
                         }
                     )
 
-        # データフレームに変換
+        # Convert to DataFrame
         df = pd.DataFrame(text_data)
 
-        logger.info(f"抽出完了: {len(df)} 個のテキスト要素が見つかりました")
+        logger.info(f"Extraction complete: {len(df)} text elements found")
 
         if progress_callback:
             try:
-                progress_callback(0.3)  # 抽出完了
+                progress_callback(0.3)  # Extraction complete
             except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
+                logger.warning(f"Progress callback error: {e}")
 
         return df
 
     except ImportError:
-        logger.error("python-pptxがインストールされていません")
+        logger.error("python-pptx is not installed")
         raise ImportError(
-            "python-pptxがインストールされていません。pip install python-pptx でインストールしてください。"
+            "python-pptx is not installed. Please install with pip install python-pptx."
         )
     except Exception as e:
-        logger.error(f"PPTXからのテキスト抽出エラー: {e}")
+        logger.error(f"Text extraction error from PPTX: {e}")
         raise
 
 def reimport_text_to_pptx(
@@ -912,45 +907,45 @@ def reimport_text_to_pptx(
     df: pd.DataFrame,
     output_path: str,
     progress_callback: Optional[Callable] = None,
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> None:
     """
-    翻訳されたテキストを PPTX ファイルに再インポートします。
-    書式とハイパーリンクを可能な限り維持します。
+    Re-import translated text into PPTX file.
+    Maintain formatting and hyperlinks as much as possible.
 
     Args:
-        pptx_path: 元の PPTX ファイルのパス
-        df: 翻訳されたテキストを含む DataFrame
-        output_path: 出力 PPTX ファイルのパス
-        progress_callback: 進捗を報告するコールバック関数
-        check_cancelled: 中止状態をチェックする関数
+        pptx_path: Original PPTX file path
+        df: DataFrame containing translated text
+        output_path: Output PPTX file path
+        progress_callback: Callback function to report progress
+        check_cancelled: Function to check cancellation status
     """
     logger.info(
-        f"翻訳されたテキストを PPTX ファイルに再インポートしています: {output_path}"
+        f"Re-importing translated text into PPTX file: {output_path}"
     )
 
     try:
         from pptx import Presentation
 
-        # プレゼンテーションを開く
+        # Open presentation
         prs = Presentation(pptx_path)
 
         total_items = len(df)
 
-        # 各スライドと形状に翻訳テキストを適用
+        # Apply translated text to each slide and shape
         for i, (index, row) in enumerate(df.iterrows()):
-            # 中止チェック
+            # Check cancellation
             if check_cancelled and check_cancelled():
-                logger.info("PPTX再インポートが中止されました")
+                logger.info("PPTX re-import cancelled")
                 return
 
             if progress_callback:
                 try:
-                    # 再インポートは全体の80%〜100%と想定
+                    # Re-import is 80%~100% of total
                     progress = 0.8 + (i / total_items * 0.2)
                     progress_callback(progress)
                 except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
+                    logger.warning(f"Progress callback error: {e}")
 
             slide_num = row["slide_num"]
             shape_id = row["shape_id"]
@@ -958,48 +953,48 @@ def reimport_text_to_pptx(
             hyperlink = row.get("hyperlink")
 
             logger.debug(
-                f"スライド {slide_num+1}, 形状 {shape_id+1} に翻訳テキストを適用中..."
+                f"Applying translated text to Slide {slide_num+1}, Shape {shape_id+1}..."
             )
 
-            # 該当するスライドと形状を特定してテキストを置換
+            # Identify corresponding slide and shape and replace text
             if slide_num < len(prs.slides):
                 slide = prs.slides[slide_num]
                 shapes = list(slide.shapes)
                 if shape_id < len(shapes):
                     shape = shapes[shape_id]
                     if hasattr(shape, "text_frame"):
-                        # 翻訳テキストを段落ごとに分割
+                        # Split translated text by paragraph
                         translated_paragraphs = translated_text.split("\n")
                         original_paragraphs = [p for p in shape.text_frame.paragraphs]
 
-                        # 既存の段落数と翻訳後の段落数を比較
+                        # Compare number of existing and translated paragraphs
                         if len(original_paragraphs) >= len(translated_paragraphs):
-                            # 既存の段落に翻訳テキストを適用（書式を維持）
+                            # Apply translated text to existing paragraphs (maintain formatting)
                             for p_idx, p_text in enumerate(translated_paragraphs):
                                 if p_idx < len(original_paragraphs):
-                                    # 元の段落の書式を保持しながらテキストを置換
+                                    # Replace text while maintaining original paragraph formatting
                                     original_p = original_paragraphs[p_idx]
 
-                                    # 段落内のランの処理
+                                    # Process runs in paragraph
                                     if len(original_p.runs) > 0:
-                                        # 最初のランにテキストを設定
+                                        # Set text to first run
                                         original_p.runs[0].text = p_text
 
-                                        # 残りのランを空にする
+                                        # Empty remaining runs
                                         for run in original_p.runs[1:]:
                                             run.text = ""
                                     else:
-                                        # ランがない場合は段落のテキストを直接設定
+                                        # Set paragraph text directly if no runs
                                         original_p.text = p_text
 
-                            # 余分な段落を空にする
+                            # Empty extra paragraphs
                             for p_idx in range(
                                 len(translated_paragraphs), len(original_paragraphs)
                             ):
                                 original_paragraphs[p_idx].text = ""
                         else:
-                            # 翻訳後の段落数が多い場合
-                            # 既存の段落を更新
+                            # If more translated paragraphs
+                            # Update existing paragraphs
                             for p_idx, original_p in enumerate(original_paragraphs):
                                 if p_idx < len(translated_paragraphs):
                                     if len(original_p.runs) > 0:
@@ -1011,64 +1006,64 @@ def reimport_text_to_pptx(
                                     else:
                                         original_p.text = translated_paragraphs[p_idx]
 
-                            # 不足している段落を追加
+                            # Add missing paragraphs
                             for p_idx in range(
                                 len(original_paragraphs), len(translated_paragraphs)
                             ):
                                 p = shape.text_frame.add_paragraph()
                                 p.text = translated_paragraphs[p_idx]
 
-                                # 可能であれば最初の段落のスタイルをコピー
+                                # Copy style from first paragraph if possible
                                 if original_paragraphs and hasattr(
                                     original_paragraphs[0], "alignment"
                                 ):
                                     p.alignment = original_paragraphs[0].alignment
 
-                        # ハイパーリンクの処理
+                        # Process hyperlinks
                         if hyperlink:
                             try:
-                                # python-pptxの制限により、完全なハイパーリンクの再設定は難しい場合がある
-                                # 可能な場合は、クリックアクションのハイパーリンクを設定
+                                # Due to python-pptx limitations, complete hyperlink reset may be difficult
+                                # Set click action hyperlink if possible
                                 if hasattr(shape, "click_action"):
-                                    logger.debug(f"ハイパーリンクを維持: {hyperlink}")
+                                    logger.debug(f"Maintaining hyperlink: {hyperlink}")
                                     shape.click_action.hyperlink.address = hyperlink
                             except Exception as e:
                                 logger.warning(
-                                    f"ハイパーリンクの設定に失敗しました: {e}"
+                                    f"Failed to set hyperlink: {e}"
                                 )
 
-        # 新しいファイルとして保存
-        logger.info(f"翻訳された PPTX ファイルを保存しています: {output_path}")
+        # Save as new file
+        logger.info(f"Saving translated PPTX file: {output_path}")
         prs.save(output_path)
 
         if progress_callback:
             try:
-                progress_callback(1.0)  # 完了
+                progress_callback(1.0)  # Complete
             except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
+                logger.warning(f"Progress callback error: {e}")
 
     except Exception as e:
-        logger.error(f"PPTX再インポートエラー: {e}")
+        logger.error(f"PPTX re-import error: {e}")
         raise
 
 #
-# DOCX 処理関数
+# DOCX processing functions
 #
 
 def extract_text_from_docx(
     docx_path: str, progress_callback: Optional[Callable] = None
 ) -> pd.DataFrame:
     """
-    Word(docx)ファイルからテキストを抽出し、DataFrameとして返します。
+    Extract text from Word (docx) file and return as DataFrame.
 
     Args:
-        docx_path: Wordファイルのパス
-        progress_callback: 進捗を報告するコールバック関数
+        docx_path: Word file path
+        progress_callback: Callback function to report progress
 
     Returns:
-        テキストデータを含むDataFrame
+        DataFrame containing text data
     """
-    logger.info(f"Word文書 '{docx_path}' からテキストを抽出しています...")
+    logger.info(f"Extracting text from Word document '{docx_path}'...")
 
     try:
         from docx import Document
@@ -1076,35 +1071,35 @@ def extract_text_from_docx(
         doc = Document(docx_path)
         text_data = []
 
-        # 段落と表の総数を計算（進捗表示用）
+        # Calculate total number of paragraphs and tables (for progress display)
         total_elements = len(doc.paragraphs)
         for table in doc.tables:
             for row in table.rows:
                 total_elements += len(row.cells)
 
-        logger.info(f"要素数: {total_elements}")
+        logger.info(f"Number of elements: {total_elements}")
 
-        # 段落からテキストを抽出
+        # Extract text from paragraphs
         element_count = 0
         for para_id, para in enumerate(doc.paragraphs):
             if progress_callback:
                 try:
                     progress_callback(
                         element_count / total_elements * 0.3
-                    )  # 抽出は全体の30%と想定
+                    )  # Extraction is 30% of total
                 except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
+                    logger.warning(f"Progress callback error: {e}")
                 element_count += 1
 
             text = para.text.strip()
             if text:
-                logger.debug(f"段落 {para_id+1}: {text[:50]}...")
+                logger.debug(f"Paragraph {para_id+1}: {text[:50]}...")
 
-                # スタイル情報を取得
+                # Get style information
                 style_name = para.style.name if para.style else "Normal"
                 alignment = para.alignment if hasattr(para, "alignment") else None
 
-                # 段落内のランの書式情報を収集
+                # Collect run formatting information in paragraph
                 runs_info = []
                 for run_id, run in enumerate(para.runs):
                     if run.text.strip():
@@ -1119,7 +1114,7 @@ def extract_text_from_docx(
                 text_data.append(
                     {
                         "element_type": "paragraph",
-                        "para_id": int(para_id),  # 確実に整数を使用
+                        "para_id": int(para_id),  # Ensure integer is used
                         "original_text": text,
                         "style_name": style_name,
                         "alignment": alignment,
@@ -1130,7 +1125,7 @@ def extract_text_from_docx(
                     }
                 )
 
-        # 表からテキストを抽出
+        # Extract text from tables
         for table_id, table in enumerate(doc.tables):
             for row_id, row in enumerate(table.rows):
                 for cell_id, cell in enumerate(row.cells):
@@ -1138,16 +1133,16 @@ def extract_text_from_docx(
                         try:
                             progress_callback(element_count / total_elements * 0.3)
                         except Exception as e:
-                            logger.warning(f"進捗コールバックエラー: {e}")
+                            logger.warning(f"Progress callback error: {e}")
                         element_count += 1
 
                     text = cell.text.strip()
                     if text:
                         logger.debug(
-                            f"表 {table_id+1}, 行 {row_id+1}, セル {cell_id+1}: {text[:50]}..."
+                            f"Table {table_id+1}, Row {row_id+1}, Cell {cell_id+1}: {text[:50]}..."
                         )
 
-                        # セル内の段落のスタイル情報を収集
+                        # Collect style information for paragraphs in cell
                         cell_paras_info = []
                         for p_id, p in enumerate(cell.paragraphs):
                             if p.text.strip():
@@ -1168,33 +1163,33 @@ def extract_text_from_docx(
                                 "style_name": None,
                                 "alignment": None,
                                 "runs_info": None,
-                                "table_id": int(table_id),  # 確実に整数を使用
-                                "row_id": int(row_id),  # 確実に整数を使用
-                                "cell_id": int(cell_id),  # 確実に整数を使用
+                                "table_id": int(table_id),  # Ensure integer is used
+                                "row_id": int(row_id),  # Ensure integer is used
+                                "cell_id": int(cell_id),  # Ensure integer is used
                                 "cell_paras_info": cell_paras_info,
                             }
                         )
 
-        # データフレームに変換
+        # Convert to DataFrame
         df = pd.DataFrame(text_data)
 
-        logger.info(f"抽出完了: {len(df)} 個のテキスト要素が見つかりました")
+        logger.info(f"Extraction complete: {len(df)} text elements found")
 
         if progress_callback:
             try:
-                progress_callback(0.3)  # 抽出完了
+                progress_callback(0.3)  # Extraction complete
             except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
+                logger.warning(f"Progress callback error: {e}")
 
         return df
 
     except ImportError:
-        logger.error("python-docxがインストールされていません")
+        logger.error("python-docx is not installed")
         raise ImportError(
-            "python-docxがインストールされていません。pip install python-docx でインストールしてください。"
+            "python-docx is not installed. Please install with pip install python-docx."
         )
     except Exception as e:
-        logger.error(f"DOCXからのテキスト抽出エラー: {e}")
+        logger.error(f"Text extraction error from DOCX: {e}")
         raise
 
 def reimport_text_to_docx(
@@ -1202,75 +1197,75 @@ def reimport_text_to_docx(
     df: pd.DataFrame,
     output_path: str,
     progress_callback: Optional[Callable] = None,
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> None:
     """
-    翻訳されたテキストをWord文書に再インポートします。
-    書式を可能な限り維持します。
+    Re-import translated text into Word document.
+    Maintain formatting as much as possible.
 
     Args:
-        docx_path: 元のWordファイルのパス
-        df: 翻訳されたテキストを含むDataFrame
-        output_path: 出力Wordファイルのパス
-        progress_callback: 進捗を報告するコールバック関数
-        check_cancelled: 中止状態をチェックする関数
+        docx_path: Original Word file path
+        df: DataFrame containing translated text
+        output_path: Output Word file path
+        progress_callback: Callback function to report progress
+        check_cancelled: Function to check cancellation status
     """
-    logger.info(f"翻訳されたテキストをWord文書に再インポートしています: {output_path}")
+    logger.info(f"Re-importing translated text into Word document: {output_path}")
 
     try:
         from docx import Document
 
-        # 文書を開く
+        # Open document
         doc = Document(docx_path)
 
         total_items = len(df)
 
-        # 段落の翻訳テキストを適用
+        # Apply translated text to paragraphs
         para_df = df[df["element_type"] == "paragraph"]
         for i, (_, row) in enumerate(para_df.iterrows()):
-            # 中止チェック
+            # Check cancellation
             if check_cancelled and check_cancelled():
-                logger.info("DOCX再インポートが中止されました")
+                logger.info("DOCX re-import cancelled")
                 return
 
             if progress_callback:
                 try:
-                    # 再インポートは全体の80%〜100%と想定
+                    # Re-import is 80%~100% of total
                     progress = 0.8 + (i / total_items * 0.2)
                     progress_callback(progress)
                 except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
+                    logger.warning(f"Progress callback error: {e}")
 
-            # para_idが浮動小数点数の場合は整数に変換
+            # Convert para_id to integer if it's a float
             try:
                 para_id = int(row["para_id"])
             except (TypeError, ValueError):
                 logger.warning(
-                    f"段落ID '{row['para_id']}' を整数に変換できません。スキップします。"
+                    f"Cannot convert paragraph ID '{row['para_id']}' to integer. Skipping."
                 )
                 continue
 
             translated_text = row["translated_text"]
 
-            logger.debug(f"段落 {para_id+1} に翻訳テキストを適用中...")
+            logger.debug(f"Applying translated text to Paragraph {para_id+1}...")
 
-            # 該当する段落を特定してテキストを置換
+            # Identify corresponding paragraph and replace text
             if para_id < len(doc.paragraphs):
                 para = doc.paragraphs[para_id]
 
-                # 段落のテキストをクリア
+                # Clear paragraph text
                 for run in para.runs:
                     run.text = ""
 
-                # 翻訳テキストを追加
+                # Add translated text
                 if para.runs:
-                    # 既存のランがある場合は最初のランにテキストを設定
+                    # Set text to first run if existing runs
                     para.runs[0].text = translated_text
                 else:
-                    # ランがない場合は新しいランを追加
+                    # Add new run if no runs
                     run = para.add_run(translated_text)
 
-                    # 元の書式情報があれば適用
+                    # Apply original formatting information if available
                     if (
                         "runs_info" in row
                         and row["runs_info"]
@@ -1284,40 +1279,40 @@ def reimport_text_to_docx(
                         if run_info.get("underline"):
                             run.underline = True
 
-        # 表のセルの翻訳テキストを適用
+        # Apply translated text to table cells
         table_df = df[df["element_type"] == "table_cell"]
         for i, (_, row) in enumerate(table_df.iterrows()):
-            # 中止チェック
+            # Check cancellation
             if check_cancelled and check_cancelled():
-                logger.info("DOCX再インポートが中止されました")
+                logger.info("DOCX re-import cancelled")
                 return
 
             if progress_callback:
                 try:
-                    # 再インポートは全体の80%〜100%と想定
+                    # Re-import is 80%~100% of total
                     progress = 0.8 + ((len(para_df) + i) / total_items * 0.2)
                     progress_callback(progress)
                 except Exception as e:
-                    logger.warning(f"進捗コールバックエラー: {e}")
+                    logger.warning(f"Progress callback error: {e}")
 
-            # 各IDを整数に変換
+            # Convert each ID to integer
             try:
                 table_id = int(row["table_id"])
                 row_id = int(row["row_id"])
                 cell_id = int(row["cell_id"])
             except (TypeError, ValueError):
                 logger.warning(
-                    f"表ID '{row['table_id']}', 行ID '{row['row_id']}', セルID '{row['cell_id']}' を整数に変換できません。スキップします。"
+                    f"Cannot convert table ID '{row['table_id']}', row ID '{row['row_id']}', cell ID '{row['cell_id']}' to integer. Skipping."
                 )
                 continue
 
             translated_text = row["translated_text"]
 
             logger.debug(
-                f"表 {table_id+1}, 行 {row_id+1}, セル {cell_id+1} に翻訳テキストを適用中..."
+                f"Applying translated text to Table {table_id+1}, Row {row_id+1}, Cell {cell_id+1}..."
             )
 
-            # 該当するセルを特定してテキストを置換
+            # Identify corresponding cell and replace text
             try:
                 if table_id < len(doc.tables):
                     table = doc.tables[table_id]
@@ -1326,96 +1321,96 @@ def reimport_text_to_docx(
                         if cell_id < len(row_obj.cells):
                             cell = row_obj.cells[cell_id]
 
-                            # セルのテキストをクリア
+                            # Clear cell text
                             cell.text = ""
 
-                            # 翻訳テキストを追加
-                            # セル内の段落情報があれば、それに基づいて段落を作成
+                            # Add translated text
+                            # Create paragraphs based on cell paragraph information if available
                             if "cell_paras_info" in row and row["cell_paras_info"]:
                                 paragraphs = translated_text.split("\n")
                                 for p_idx, p_text in enumerate(paragraphs):
                                     if p_idx == 0:
-                                        # 最初の段落は既に存在する
+                                        # First paragraph already exists
                                         p = cell.paragraphs[0]
                                     else:
-                                        # 追加の段落を作成
+                                        # Create additional paragraphs
                                         p = cell.add_paragraph()
 
                                     p.text = p_text
 
-                                    # 元の段落情報があれば、スタイルを適用
+                                    # Apply style if original paragraph information available
                                     if p_idx < len(row["cell_paras_info"]):
                                         para_info = row["cell_paras_info"][p_idx]
                                         if para_info.get("alignment") is not None:
                                             p.alignment = para_info["alignment"]
                             else:
-                                # 段落情報がない場合は単純にテキストを設定
+                                # Simply set text if no paragraph information
                                 cell.text = translated_text
             except Exception as e:
-                logger.warning(f"表セルの更新中にエラーが発生しました: {e}")
+                logger.warning(f"Error updating table cell: {e}")
                 continue
 
-        # 新しいファイルとして保存
-        logger.info(f"翻訳されたWord文書を保存しています: {output_path}")
+        # Save as new file
+        logger.info(f"Saving translated Word document: {output_path}")
         doc.save(output_path)
 
         if progress_callback:
             try:
-                progress_callback(1.0)  # 完了
+                progress_callback(1.0)  # Complete
             except Exception as e:
-                logger.warning(f"進捗コールバックエラー: {e}")
+                logger.warning(f"Progress callback error: {e}")
 
     except Exception as e:
-        logger.error(f"DOCX再インポートエラー: {e}")
+        logger.error(f"DOCX re-import error: {e}")
         raise
 
 #
-# PDF 処理関数（translator.py.old.pyの処理フローに合わせて修正）
+# PDF processing functions (modified to match translator.py.old.py processing flow)
 #
 
 def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
     """
-    PDFファイルをDOCXに変換します。
-    pdf2docxライブラリを優先し、失敗時はLibreOfficeを使用します。
+    Convert PDF file to DOCX.
+    Prioritize pdf2docx library, use LibreOffice on failure.
     
     Args:
-        pdf_path: 入力PDFファイルのパス
-        docx_path: 出力DOCXファイルのパス
+        pdf_path: Input PDF file path
+        docx_path: Output DOCX file path
         
     Returns:
-        変換されたDOCXファイルのパス
+        Converted DOCX file path
     """
-    logger.info(f"PDFをDOCXに変換しています: {pdf_path} -> {docx_path}")
+    logger.info(f"Converting PDF to DOCX: {pdf_path} -> {docx_path}")
     
-    # 方法1: pdf2docxライブラリを使用
+    # Method 1: Use pdf2docx library
     try:
         from pdf2docx import Converter
         
-        logger.info("pdf2docxを使用してPDFをDOCXに変換しています...")
+        logger.info("Converting PDF to DOCX using pdf2docx...")
         
-        # PDFをDOCXに変換
+        # Convert PDF to DOCX
         cv = Converter(pdf_path)
         cv.convert(docx_path)
         cv.close()
         
-        # 変換結果を確認
+        # Verify conversion result
         if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
-            logger.info(f"pdf2docxによるPDF→DOCX変換が完了しました: {docx_path}")
+            logger.info(f"PDF→DOCX conversion complete using pdf2docx: {docx_path}")
             return docx_path
         else:
-            logger.warning("pdf2docxでDOCXが作成されませんでした")
-            raise Exception("DOCXが作成されませんでした")
+            logger.warning("DOCX not created by pdf2docx")
+            raise Exception("DOCX not created")
             
     except ImportError:
-        logger.warning("pdf2docxがインストールされていません。LibreOfficeを試行します。")
+        logger.warning("pdf2docx not installed. Trying LibreOffice.")
     except Exception as e:
-        logger.warning(f"pdf2docxによるPDF→DOCX変換に失敗しました: {e}. LibreOfficeを試行します。")
+        logger.warning(f"PDF→DOCX conversion failed using pdf2docx: {e}. Trying LibreOffice.")
     
-    # 方法2: LibreOfficeを使用してPDFをDOCXに変換
+    # Method 2: Convert PDF to DOCX using LibreOffice
     try:
-        logger.info("LibreOfficeを使用してPDFをDOCXに変換しています...")
+        logger.info("Converting PDF to DOCX using LibreOffice...")
         
-        # LibreOfficeのパスを検索
+        # Search for LibreOffice path
         libreoffice_paths = [
             "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
             "/usr/local/bin/soffice",
@@ -1428,7 +1423,7 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
         for path in libreoffice_paths:
             try:
                 if os.path.exists(path) or path in ["libreoffice", "soffice"]:
-                    # コマンドの存在確認
+                    # Verify command existence
                     result = subprocess.run([path, "--version"], 
                                           capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
@@ -1438,9 +1433,9 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
                 continue
         
         if not libreoffice_cmd:
-            raise FileNotFoundError("LibreOfficeが見つかりません")
+            raise FileNotFoundError("LibreOffice not found")
         
-        # LibreOfficeを使用してPDFをDOCXに変換
+        # Convert PDF to DOCX using LibreOffice
         output_dir = os.path.dirname(docx_path)
         cmd = [
             libreoffice_cmd,
@@ -1452,7 +1447,7 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
         result = subprocess.run(cmd, check=True, timeout=120, 
                               capture_output=True, text=True)
         
-        # LibreOfficeは元のファイル名を使用するため、必要に応じてリネーム
+        # LibreOffice uses original filename, rename if necessary
         generated_docx = os.path.join(
             output_dir,
             os.path.splitext(os.path.basename(pdf_path))[0] + ".docx"
@@ -1462,23 +1457,23 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
             shutil.move(generated_docx, docx_path)
         
         if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
-            logger.info(f"LibreOfficeによるPDF→DOCX変換が完了しました: {docx_path}")
+            logger.info(f"PDF→DOCX conversion complete using LibreOffice: {docx_path}")
             return docx_path
         else:
-            logger.warning("LibreOfficeでDOCXが作成されませんでした")
-            raise Exception("DOCXが作成されませんでした")
+            logger.warning("DOCX not created by LibreOffice")
+            raise Exception("DOCX not created")
             
     except Exception as e:
-        logger.warning(f"LibreOfficeによるPDF→DOCX変換に失敗しました: {e}")
+        logger.warning(f"PDF→DOCX conversion failed using LibreOffice: {e}")
         
-        # 方法3: PDFから直接テキストを抽出してDOCXを作成
+        # Method 3: Extract text directly from PDF and create DOCX
         try:
-            logger.info("PDFから直接テキストを抽出してDOCXを作成しています...")
+            logger.info("Extracting text directly from PDF and creating DOCX...")
             
-            # PDFからテキストを抽出
+            # Extract text from PDF
             text_content = []
             
-            # pdfplumberを試す
+            # Try pdfplumber
             try:
                 import pdfplumber
                 with pdfplumber.open(pdf_path) as pdf:
@@ -1487,9 +1482,9 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
                         if text and text.strip():
                             text_content.append(f"=== Page {page_num + 1} ===\n{text}\n")
             except Exception as e:
-                logger.warning(f"pdfplumberでの抽出に失敗: {e}")
+                logger.warning(f"Extraction failed with pdfplumber: {e}")
                 
-                # PyPDF2を試す
+                # Try PyPDF2
                 try:
                     import PyPDF2
                     with open(pdf_path, 'rb') as file:
@@ -1499,13 +1494,13 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
                             if text and text.strip():
                                 text_content.append(f"=== Page {page_num + 1} ===\n{text}\n")
                 except Exception as e2:
-                    logger.error(f"PyPDF2での抽出も失敗: {e2}")
-                    raise ValueError(f"PDFからのテキスト抽出に失敗しました: {str(e2)}")
+                    logger.error(f"Extraction also failed with PyPDF2: {e2}")
+                    raise ValueError(f"Failed to extract text from PDF: {str(e2)}")
             
             if not text_content:
-                raise ValueError("PDFからテキストを抽出できませんでした")
+                raise ValueError("Could not extract text from PDF")
             
-            # DOCXファイルを作成
+            # Create DOCX file
             from docx import Document
             doc = Document()
             
@@ -1518,80 +1513,80 @@ def convert_pdf_to_docx(pdf_path: str, docx_path: str) -> str:
             doc.save(docx_path)
             
             if os.path.exists(docx_path) and os.path.getsize(docx_path) > 0:
-                logger.info(f"テキスト抽出によるDOCX作成が完了しました: {docx_path}")
+                logger.info(f"DOCX creation complete using text extraction: {docx_path}")
                 return docx_path
             else:
-                raise ValueError("DOCXファイルの作成に失敗しました")
+                raise ValueError("Failed to create DOCX file")
                 
         except Exception as e2:
-            logger.error(f"テキスト抽出によるDOCX作成も失敗しました: {e2}")
-            raise ValueError(f"PDFからDOCXへの変換に失敗しました: {str(e2)}")
+            logger.error(f"DOCX creation also failed using text extraction: {e2}")
+            raise ValueError(f"Failed to convert PDF to DOCX: {str(e2)}")
 
 def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
     """
-    DOCXファイルをPDFに変換します。
-    複数の方法を試行してフォールバック処理を行います。
+    Convert DOCX file to PDF.
+    Try multiple methods with fallback processing.
     
     Args:
-        docx_path: 入力DOCXファイルのパス
-        pdf_path: 出力PDFファイルのパス
+        docx_path: Input DOCX file path
+        pdf_path: Output PDF file path
         
     Returns:
-        変換されたPDFファイルのパス
+        Converted PDF file path
     """
     import sys
     import threading
     import time
     
-    logger.info(f"DOCXをPDFに変換しています: {docx_path} -> {pdf_path}")
+    logger.info(f"Converting DOCX to PDF: {docx_path} -> {pdf_path}")
     
-    # 方法1: docx2pdfを試す
+    # Method 1: Try docx2pdf
     try:
         from docx2pdf import convert
         
-        logger.info("docx2pdfを使用してDOCXをPDFに変換しています...")
+        logger.info("Converting DOCX to PDF using docx2pdf...")
         
         def convert_with_timeout():
             try:
                 convert(docx_path, pdf_path)
                 return True
             except Exception as e:
-                logger.error(f"docx2pdf変換エラー: {e}")
+                logger.error(f"docx2pdf conversion error: {e}")
                 return False
         
-        # 別スレッドで変換を実行（タイムアウト付き）
+        # Execute conversion in separate thread (with timeout)
         thread = threading.Thread(target=convert_with_timeout)
         thread.daemon = True
         thread.start()
         
-        # 最大60秒待機
+        # Wait up to 60 seconds
         timeout = 60
         start_time = time.time()
         while thread.is_alive() and time.time() - start_time < timeout:
             time.sleep(1)
         
         if thread.is_alive():
-            logger.warning(f"docx2pdfがタイムアウトしました（{timeout}秒）")
-            raise TimeoutError(f"docx2pdfがタイムアウトしました（{timeout}秒）")
+            logger.warning(f"docx2pdf timed out ({timeout} seconds)")
+            raise TimeoutError(f"docx2pdf timed out ({timeout} seconds)")
         
-        # 変換結果を確認
+        # Verify conversion result
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-            logger.info(f"docx2pdfによるDOCX変換が完了しました: {pdf_path}")
+            logger.info(f"DOCX conversion complete using docx2pdf: {pdf_path}")
             return pdf_path
         else:
-            logger.warning("docx2pdfでPDFが作成されませんでした")
-            raise Exception("PDFが作成されませんでした")
+            logger.warning("PDF not created by docx2pdf")
+            raise Exception("PDF not created")
             
     except ImportError:
-        logger.warning("docx2pdfがインストールされていません。代替方法を試みます。")
+        logger.warning("docx2pdf not installed. Trying alternative method.")
     except Exception as e:
-        logger.warning(f"docx2pdfによる変換に失敗しました: {e}. 代替方法を試みます。")
+        logger.warning(f"Conversion failed using docx2pdf: {e}. Trying alternative method.")
     
-    # 方法2: LibreOfficeを試す
+    # Method 2: Try LibreOffice
     try:
-        logger.info("LibreOfficeを使用してDOCXをPDFに変換しています...")
+        logger.info("Converting DOCX to PDF using LibreOffice...")
         
-        # LibreOfficeのパスを検索
+        # Search for LibreOffice path
         libreoffice_paths = [
             "/Applications/LibreOffice.app/Contents/MacOS/soffice",  # macOS
             "/usr/local/bin/soffice",
@@ -1604,7 +1599,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
         for path in libreoffice_paths:
             try:
                 if os.path.exists(path) or path in ["libreoffice", "soffice"]:
-                    # コマンドの存在確認
+                    # Verify command existence
                     result = subprocess.run([path, "--version"], 
                                           capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
@@ -1614,9 +1609,9 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
                 continue
         
         if not libreoffice_cmd:
-            raise FileNotFoundError("LibreOfficeが見つかりません")
+            raise FileNotFoundError("LibreOffice not found")
         
-        # LibreOfficeを使用してDOCXをPDFに変換
+        # Convert DOCX to PDF using LibreOffice
         cmd = [
             libreoffice_cmd,
             "--headless", "--convert-to", "pdf",
@@ -1627,7 +1622,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
         result = subprocess.run(cmd, check=True, timeout=120, 
                               capture_output=True, text=True)
         
-        # LibreOfficeは元のファイル名を使用するため、必要に応じてリネーム
+        # LibreOffice uses original filename, rename if necessary
         generated_pdf = os.path.join(
             os.path.dirname(pdf_path),
             os.path.splitext(os.path.basename(docx_path))[0] + ".pdf"
@@ -1637,25 +1632,25 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
             shutil.move(generated_pdf, pdf_path)
         
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-            logger.info(f"LibreOfficeによるDOCX変換が完了しました: {pdf_path}")
+            logger.info(f"DOCX conversion complete using LibreOffice: {pdf_path}")
             return pdf_path
         else:
-            logger.warning("LibreOfficeでPDFが作成されませんでした")
-            raise Exception("PDFが作成されませんでした")
+            logger.warning("PDF not created by LibreOffice")
+            raise Exception("PDF not created")
             
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        logger.warning(f"LibreOfficeによる変換に失敗しました: {e}")
+        logger.warning(f"Conversion failed using LibreOffice: {e}")
     
-    # 方法3: reportlabを使用した簡易PDF生成
+    # Method 3: Simple PDF generation using reportlab
     try:
         from reportlab.lib.pagesizes import letter
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet
         from docx import Document
         
-        logger.info("reportlabを使用して簡易PDFを生成しています...")
+        logger.info("Generating simple PDF using reportlab...")
         
-        # DOCXからテキストを抽出
+        # Extract text from DOCX
         doc = Document(docx_path)
         text_content = []
         
@@ -1663,7 +1658,7 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
             if para.text.strip():
                 text_content.append(para.text)
         
-        # 表からもテキストを抽出
+        # Also extract text from tables
         for table in doc.tables:
             for row in table.rows:
                 row_text = []
@@ -1673,50 +1668,50 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
                 if row_text:
                     text_content.append(" | ".join(row_text))
         
-        # PDFを生成
+        # Generate PDF
         pdf_doc = SimpleDocTemplate(pdf_path, pagesize=letter)
         styles = getSampleStyleSheet()
         flowables = []
         
         for text in text_content:
             try:
-                # 問題のある文字を除去
+                # Remove problematic characters
                 safe_text = ''.join(c for c in text if ord(c) < 65536)
                 p = Paragraph(safe_text, styles["Normal"])
                 flowables.append(p)
                 flowables.append(Spacer(1, 12))
             except Exception as e:
-                logger.warning(f"段落の作成に失敗しました: {e}")
+                logger.warning(f"Failed to create paragraph: {e}")
                 continue
         
         pdf_doc.build(flowables)
         
         if os.path.exists(pdf_path) and os.path.getsize(pdf_path) > 0:
-            logger.info(f"reportlabによる簡易PDF生成が完了しました: {pdf_path}")
-            logger.warning("注意: 簡易PDFはフォーマットが制限されています")
+            logger.info(f"Simple PDF generation complete using reportlab: {pdf_path}")
+            logger.warning("Note: Simple PDF has limited formatting")
             return pdf_path
         else:
-            logger.warning("reportlabでPDFが作成されませんでした")
-            raise Exception("PDFが作成されませんでした")
+            logger.warning("PDF not created by reportlab")
+            raise Exception("PDF not created")
             
     except ImportError:
-        logger.warning("reportlabがインストールされていません")
+        logger.warning("reportlab not installed")
     except Exception as e:
-        logger.warning(f"reportlabによる変換に失敗しました: {e}")
+        logger.warning(f"Conversion failed using reportlab: {e}")
     
-    # すべての方法が失敗した場合
-    logger.error("すべてのPDF変換方法が失敗しました")
+    # All methods failed
+    logger.error("All PDF conversion methods failed")
     
-    # 最終手段: DOCXファイルをそのまま返す
+    # Last resort: Copy DOCX file as is
     docx_copy_path = pdf_path.replace(".pdf", ".docx")
     shutil.copy(docx_path, docx_copy_path)
-    logger.warning(f"PDF変換に失敗したため、DOCXファイルをコピーしました: {docx_copy_path}")
+    logger.warning(f"PDF conversion failed, copied DOCX file: {docx_copy_path}")
     
-    # エラーメッセージを含むテキストファイルを作成
+    # Create text file with error message
     error_txt_path = pdf_path.replace(".pdf", "_error.txt")
     with open(error_txt_path, "w", encoding="utf-8") as f:
-        f.write(f"PDF変換に失敗しました。DOCXファイルが代わりに保存されています: {docx_copy_path}\n")
-        f.write("すべての変換方法（docx2pdf, LibreOffice, reportlab）が失敗しました。\n")
+        f.write(f"PDF conversion failed. DOCX file saved instead: {docx_copy_path}\n")
+        f.write("All conversion methods (docx2pdf, LibreOffice, reportlab) failed.\n")
     
     return docx_copy_path
 
@@ -1724,7 +1719,7 @@ def translate_pdf(
     input_path: str,
     output_path: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
@@ -1733,62 +1728,67 @@ def translate_pdf(
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    PDFファイルを翻訳します。
-    translator.py.old.pyの処理フローに従います：
-    1. convert_pdf_to_docx()でPDFをDOCXに変換
-    2. translate_docx()でDOCX翻訳を実行
-    3. convert_docx_to_pdf()で翻訳済みDOCXをPDFに変換
+    Translate PDF file.
+    Follow translator.py.old.py processing flow:
+    1. Convert PDF to DOCX with convert_pdf_to_docx()
+    2. Execute DOCX translation with translate_docx()
+    3. Convert translated DOCX to PDF with convert_docx_to_pdf()
     
     Args:
-        input_path: 入力PDFファイルのパス
-        output_path: 出力PDFファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
+        input_path: Input PDF file path
+        output_path: Output PDF file path
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        progress_callback: Callback function to report progress
+        save_text_files_flag: Whether to save text files
+        ai_instruction: Supplementary instructions for AI
+        check_cancelled: Function to check cancellation status
         
     Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+        (extracted text file path, translated text file path)
     """
-    logger.info(f"PDF翻訳を開始します: {input_path} -> {output_path}")
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+    
+    logger.info(f"Starting PDF translation: {input_path} -> {output_path}")
     
     if ai_instruction:
-        logger.info(f"AIへの補足指示: {ai_instruction}")
+        logger.info(f"Supplementary instructions for AI: {ai_instruction}")
     
-    # 一時ファイルのパスを生成
+    # Generate temporary file paths
     temp_dir = os.path.dirname(output_path)
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     temp_docx_input = os.path.join(temp_dir, f"{base_name}_temp_input.docx")
     temp_docx_output = os.path.join(temp_dir, f"{base_name}_temp_output.docx")
     
     try:
-        # 中止チェック
+        # Check cancellation
         if check_cancelled and check_cancelled():
-            logger.info("翻訳が中止されました")
+            logger.info("Translation cancelled")
             return None, None
         
-        # 進捗状況の更新
+        # Update progress
         if progress_callback:
             progress_callback(0.05)
             
-        # 1. PDFをDOCXに変換
-        logger.info("PDFをDOCXに変換しています...")
+        # 1. Convert PDF to DOCX
+        logger.info("Converting PDF to DOCX...")
         convert_pdf_to_docx(input_path, temp_docx_input)
         
-        # 中止チェック
+        # Check cancellation
         if check_cancelled and check_cancelled():
-            logger.info("翻訳が中止されました")
+            logger.info("Translation cancelled")
             return None, None
         
         if progress_callback:
             progress_callback(0.15)
         
-        # 2. DOCXを翻訳
-        logger.info("DOCXを翻訳しています...")
+        # 2. Translate DOCX
+        logger.info("Translating DOCX...")
         extracted_file, translated_file = translate_docx(
             temp_docx_input,
             temp_docx_output,
@@ -1796,55 +1796,55 @@ def translate_pdf(
             model,
             source_lang,
             target_lang,
-            # 進捗コールバックを調整して15%〜85%の範囲にする
+            # Adjust progress callback to 15%~85% range
             lambda p: progress_callback(0.15 + p * 0.7) if progress_callback else None,
             save_text_files_flag,
             ai_instruction,
             check_cancelled
         )
         
-        # 中止チェック
+        # Check cancellation
         if check_cancelled and check_cancelled():
-            logger.info("翻訳が中止されました")
+            logger.info("Translation cancelled")
             return extracted_file, translated_file
         
-        # 3. 翻訳済みDOCXをPDFに変換
-        logger.info("翻訳済みDOCXをPDFに変換しています...")
+        # 3. Convert translated DOCX to PDF
+        logger.info("Converting translated DOCX to PDF...")
         final_output = convert_docx_to_pdf(temp_docx_output, output_path)
         
         if progress_callback:
             progress_callback(1.0)
             
-        # 最終出力がDOCXファイルの場合（PDF変換に失敗した場合）
+        # If final output is DOCX file (PDF conversion failed)
         if final_output.endswith('.docx'):
-            logger.warning("PDF変換に失敗しました。DOCXファイルが提供されます。")
-            # DOCXファイルを適切な場所に移動
+            logger.warning("PDF conversion failed. DOCX file will be provided.")
+            # Move DOCX file to appropriate location
             if final_output != output_path.replace('.pdf', '.docx'):
                 shutil.move(final_output, output_path.replace('.pdf', '.docx'))
         
-        logger.info(f"PDF翻訳が完了しました: {output_path}")
+        logger.info(f"PDF translation complete: {output_path}")
         return extracted_file, translated_file
         
     except Exception as e:
-        logger.error(f"PDF翻訳エラー: {e}")
+        logger.error(f"PDF translation error: {e}")
         raise
     finally:
-        # 一時ファイルの削除
+        # Delete temporary files
         try:
             if os.path.exists(temp_docx_input):
                 os.remove(temp_docx_input)
-                logger.debug(f"一時ファイルを削除しました: {temp_docx_input}")
+                logger.debug(f"Deleted temporary file: {temp_docx_input}")
             if os.path.exists(temp_docx_output):
                 os.remove(temp_docx_output)
-                logger.debug(f"一時ファイルを削除しました: {temp_docx_output}")
+                logger.debug(f"Deleted temporary file: {temp_docx_output}")
         except Exception as e:
-            logger.warning(f"一時ファイルの削除に失敗しました: {e}")
+            logger.warning(f"Failed to delete temporary files: {e}")
 
 def translate_xlsx(
     input_path: str,
     output_path: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
@@ -1853,35 +1853,40 @@ def translate_xlsx(
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    XLSXファイルを翻訳します。
+    Translate XLSX file.
 
     Args:
-        input_path: 入力Excelファイルのパス
-        output_path: 出力Excelファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
+        input_path: Input Excel file path
+        output_path: Output Excel file path
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        progress_callback: Callback function to report progress
+        save_text_files_flag: Whether to save text files
+        ai_instruction: Supplementary instructions for AI
+        check_cancelled: Function to check cancellation status
 
     Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+        (extracted text file path, translated text file path)
     """
-    logger.info(f"Excel翻訳を開始: {input_path} -> {output_path}")
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+    
+    logger.info(f"Starting Excel translation: {input_path} -> {output_path}")
 
     try:
-        # 進捗表示
+        # Display progress
         if progress_callback:
             progress_callback(0.1)
 
-        # Excelファイルを読み込み
+        # Read Excel file
         excel = pd.read_excel(input_path, sheet_name=None, engine="openpyxl")
         total_sheets = len(excel)
         
-        # テキストデータを抽出してDataFrameに変換
+        # Extract text data and convert to DataFrame
         text_data = []
         for sheet_idx, (sheet_name, df) in enumerate(excel.items()):
             if check_cancelled and check_cancelled():
@@ -1900,10 +1905,10 @@ def translate_xlsx(
             if progress_callback:
                 progress_callback(0.1 + (sheet_idx / total_sheets * 0.2))
 
-        # テキストデータをDataFrameに変換
+        # Convert text data to DataFrame
         text_df = pd.DataFrame(text_data)
 
-        # テキストファイルを保存
+        # Save text files
         output_dir = os.path.dirname(output_path)
         base_filename = os.path.splitext(os.path.basename(output_path))[0]
         extracted_file = None
@@ -1912,7 +1917,7 @@ def translate_xlsx(
         if save_text_files_flag:
             extracted_file, _ = save_text_files(text_df, output_dir, base_filename)
 
-        # テキストを翻訳
+        # Translate text
         text_df = translate_dataframe(
             text_df,
             api_key,
@@ -1927,7 +1932,7 @@ def translate_xlsx(
         if save_text_files_flag and 'translated_text' in text_df.columns:
             _, translated_file = save_text_files(text_df, output_dir, base_filename)
 
-        # 翻訳結果をExcelに反映
+        # Reflect translation results in Excel
         translated_excel = excel.copy()
         for _, row in text_df.iterrows():
             if check_cancelled and check_cancelled():
@@ -1937,7 +1942,7 @@ def translate_xlsx(
                 sheet = translated_excel[row['sheet_name']]
                 sheet.at[row['row'], row['column']] = row['translated_text']
 
-        # 翻訳したExcelファイルを保存
+        # Save translated Excel file
         with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
             for sheet_name, df in translated_excel.items():
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -1948,84 +1953,89 @@ def translate_xlsx(
         return extracted_file, translated_file
 
     except Exception as e:
-        logger.error(f"Excel翻訳エラー: {e}")
+        logger.error(f"Excel translation error: {e}")
         raise
 
 def translate_pptx(
     input_path: str,
     output_path: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
     save_text_files_flag: bool = True,
     ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    PPTX ファイルを翻訳します。
+    Translate PPTX file.
 
     Args:
-        input_path: 入力 PPTX ファイルのパス
-        output_path: 出力 PPTX ファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
+        input_path: Input PPTX file path
+        output_path: Output PPTX file path
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        progress_callback: Callback function to report progress
+        save_text_files_flag: Whether to save text files
+        ai_instruction: Supplementary instructions for AI
+        check_cancelled: Function to check cancellation status
 
     Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+        (extracted text file path, translated text file path)
     """
-    logger.info(f"PPTX 翻訳を開始します: {input_path} -> {output_path}")
-    logger.info(f"言語: {source_lang} -> {target_lang}, モデル: {model}")
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+    
+    logger.info(f"Starting PPTX translation: {input_path} -> {output_path}")
+    logger.info(f"Languages: {source_lang} -> {target_lang}, Model: {model}")
 
     if ai_instruction:
-        logger.info(f"AIへの補足指示: {ai_instruction}")
+        logger.info(f"Supplementary instructions for AI: {ai_instruction}")
 
-    # 環境変数からAPI キーを取得
+    # Get API key from environment variable
     if not api_key:
         api_key = os.environ.get("GENAI_HUB_API_KEY")
 
     if not api_key:
         raise ValueError(
-            "API キーが設定されていません。環境変数 GENAI_HUB_API_KEY を確認してください。"
+            "API key is not set. Please check environment variable GENAI_HUB_API_KEY."
         )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return None, None
 
-    # 1. テキスト抽出
+    # 1. Text extraction
     df = extract_text_from_pptx(input_path, progress_callback)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return None, None
 
-    # 出力ディレクトリとベースファイル名を取得
+    # Get output directory and base filename
     output_dir = os.path.dirname(output_path)
     base_filename = os.path.splitext(os.path.basename(output_path))[0]
 
-    # 抽出したテキストを保存
+    # Save extracted text
     extracted_file = None
     translated_file = None
 
     if save_text_files_flag:
         extracted_file, _ = save_text_files(df, output_dir, base_filename)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, None
 
-    # 2. テキスト翻訳
+    # 2. Text translation
     df = translate_dataframe(
         df,
         api_key,
@@ -2037,31 +2047,31 @@ def translate_pptx(
         check_cancelled,
     )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, None
 
-    # 翻訳したテキストを保存
+    # Save translated text
     if save_text_files_flag and "translated_text" in df.columns:
         _, translated_file = save_text_files(df, output_dir, base_filename)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, translated_file
 
-    # 3. 翻訳テキストの再インポート
+    # 3. Re-import translated text
     reimport_text_to_pptx(
         input_path, df, output_path, progress_callback, check_cancelled
     )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, translated_file
 
-    logger.info(f"PPTX 翻訳が完了しました: {output_path}")
+    logger.info(f"PPTX translation complete: {output_path}")
 
     return extracted_file, translated_file
 
@@ -2069,77 +2079,82 @@ def translate_docx(
     input_path: str,
     output_path: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
     save_text_files_flag: bool = True,
     ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,  # 中止チェック関数を追加
+    check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    Word(docx)ファイルを翻訳します。
+    Translate Word (docx) file.
 
     Args:
-        input_path: 入力Wordファイルのパス
-        output_path: 出力Wordファイルのパス
-        api_key: GenAI Hub API キー
-        model: 使用するモデル名
-        source_lang: 元の言語コード
-        target_lang: 翻訳先の言語コード
-        progress_callback: 進捗を報告するコールバック関数
-        save_text_files_flag: テキストファイルを保存するかどうか
-        ai_instruction: AIへの補足指示
-        check_cancelled: 中止状態をチェックする関数
+        input_path: Input Word file path
+        output_path: Output Word file path
+        api_key: GenAI Hub API key
+        model: Model name to use
+        source_lang: Source language code
+        target_lang: Target language code
+        progress_callback: Callback function to report progress
+        save_text_files_flag: Whether to save text files
+        ai_instruction: Supplementary instructions for AI
+        check_cancelled: Function to check cancellation status
 
     Returns:
-        (抽出テキストファイルパス, 翻訳テキストファイルパス)
+        (extracted text file path, translated text file path)
     """
-    logger.info(f"Word文書翻訳を開始します: {input_path} -> {output_path}")
-    logger.info(f"言語: {source_lang} -> {target_lang}, モデル: {model}")
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+    
+    logger.info(f"Starting Word document translation: {input_path} -> {output_path}")
+    logger.info(f"Languages: {source_lang} -> {target_lang}, Model: {model}")
 
     if ai_instruction:
-        logger.info(f"AIへの補足指示: {ai_instruction}")
+        logger.info(f"Supplementary instructions for AI: {ai_instruction}")
 
-    # 環境変数からAPI キーを取得
+    # Get API key from environment variable
     if not api_key:
         api_key = os.environ.get("GENAI_HUB_API_KEY")
 
     if not api_key:
         raise ValueError(
-            "API キーが設定されていません。環境変数 GENAI_HUB_API_KEY を確認してください。"
+            "API key is not set. Please check environment variable GENAI_HUB_API_KEY."
         )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return None, None
 
-    # 1. テキスト抽出
+    # 1. Text extraction
     df = extract_text_from_docx(input_path, progress_callback)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return None, None
 
-    # 出力ディレクトリとベースファイル名を取得
+    # Get output directory and base filename
     output_dir = os.path.dirname(output_path)
     base_filename = os.path.splitext(os.path.basename(output_path))[0]
 
-    # 抽出したテキストを保存
+    # Save extracted text
     extracted_file = None
     translated_file = None
 
     if save_text_files_flag:
         extracted_file, _ = save_text_files(df, output_dir, base_filename)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, None
 
-    # 2. テキスト翻訳
+    # 2. Text translation
     df = translate_dataframe(
         df,
         api_key,
@@ -2151,40 +2166,40 @@ def translate_docx(
         check_cancelled,
     )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, None
 
-    # 翻訳したテキストを保存
+    # Save translated text
     if save_text_files_flag and "translated_text" in df.columns:
         _, translated_file = save_text_files(df, output_dir, base_filename)
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, translated_file
 
-    # 3. 翻訳テキストの再インポート
+    # 3. Re-import translated text
     reimport_text_to_docx(
         input_path, df, output_path, progress_callback, check_cancelled
     )
 
-    # 中止チェック
+    # Check cancellation
     if check_cancelled and check_cancelled():
-        logger.info("翻訳が中止されました")
+        logger.info("Translation cancelled")
         return extracted_file, translated_file
 
-    logger.info(f"Word文書翻訳が完了しました: {output_path}")
+    logger.info(f"Word document translation complete: {output_path}")
 
     return extracted_file, translated_file
 
 def check_libreoffice() -> Tuple[bool, str]:
     """
-    LibreOfficeの可用性をチェックします。
+    Check LibreOffice availability.
 
     Returns:
-        (利用可能かどうか, バージョン情報またはエラーメッセージ)
+        (availability, version information or error message)
     """
     try:
         result = subprocess.run(
@@ -2196,28 +2211,28 @@ def check_libreoffice() -> Tuple[bool, str]:
             logger.info(f"LibreOffice version: {version}")
             return True, version
         else:
-            error_msg = f"LibreOfficeコマンドはエラーを返しました: {result.stderr}"
+            error_msg = f"LibreOffice command returned error: {result.stderr}"
             logger.error(error_msg)
             return False, error_msg
 
     except FileNotFoundError:
-        error_msg = "LibreOfficeコマンドが見つかりません。インストールされていない可能性があります。"
+        error_msg = "LibreOffice command not found. May not be installed."
         logger.error(error_msg)
         return False, error_msg
     except Exception as e:
-        error_msg = f"LibreOfficeチェックエラー: {e}"
+        error_msg = f"LibreOffice check error: {e}"
         logger.error(error_msg)
         return False, error_msg
 
 def detect_file_type(file_path: str) -> str:
     """
-    ファイルの拡張子からファイル形式を検出します。
+    Detect file format from file extension.
 
     Args:
-        file_path: ファイルパス
+        file_path: File path
 
     Returns:
-        ファイル形式 ('pptx', 'docx', 'pdf')
+        File format ('pptx', 'docx', 'pdf')
     """
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".pptx":
@@ -2229,13 +2244,13 @@ def detect_file_type(file_path: str) -> str:
     elif ext == ".xlsx":
         return "xlsx"
     else:
-        raise ValueError(f"サポートされていないファイル形式です: {ext}")
+        raise ValueError(f"Unsupported file format: {ext}")
 
 def translate_document(
     input_path: str,
     output_path: str,
     api_key: str = None,
-    model: str = "claude-3-5-haiku",
+    model: str = None,
     source_lang: str = "en",
     target_lang: str = "ja",
     progress_callback: Optional[Callable] = None,
@@ -2244,23 +2259,28 @@ def translate_document(
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    ドキュメント（PPTX, DOCX, PDF, XLSX）を翻訳します。
+    Translate document (PPTX, DOCX, PDF, XLSX).
     """
-    logger.info(f"ドキュメント翻訳を開始: {input_path} -> {output_path}")
+    # Auto-select model if not specified
+    if model is None:
+        from app.config import get_default_model
+        model = get_default_model()
+    
+    logger.info(f"Starting document translation: {input_path} -> {output_path}")
 
-    # 起動時にキャッシュをロード
+    # Load cache at startup
     if TRANSLATION_CONFIG["use_cache"] and not TRANSLATION_CACHE:
         load_translation_cache()
 
     file_type = detect_file_type(input_path)
 
     try:
-        # 各処理ステップで中止状態をチェック
+        # Check cancellation at each processing step
         if check_cancelled and check_cancelled():
             logger.info("Translation cancelled by user")
             return None, None
 
-        # ファイル形式に応じた処理
+        # Process according to file format
         if file_type == "xlsx":
             result = translate_xlsx(
                 input_path,
@@ -2314,40 +2334,40 @@ def translate_document(
                 check_cancelled
             )
         else:
-            raise ValueError(f"サポートされていないファイル形式です: {file_type}")
+            raise ValueError(f"Unsupported file format: {file_type}")
 
-        # 翻訳完了後にキャッシュを保存
+        # Save cache after translation complete
         if TRANSLATION_CONFIG["use_cache"]:
             save_translation_cache()
 
         return result
 
     except Exception as e:
-        logger.error(f"翻訳エラー: {e}")
+        logger.error(f"Translation error: {e}")
         if TRANSLATION_CONFIG["use_cache"]:
             save_translation_cache()
         raise
 
-# テスト用コード
+# Test code
 if __name__ == "__main__":
-    # API キーを環境変数から取得
+    # Get API key from environment variable
     api_key = os.environ.get("GENAI_HUB_API_KEY")
 
     if not api_key:
-        print("環境変数 GENAI_HUB_API_KEY が設定されていません。")
-        api_key = input("GenAI Hub API キーを入力してください: ")
+        print("Environment variable GENAI_HUB_API_KEY is not set.")
+        api_key = input("Enter GenAI Hub API key: ")
 
-    # 簡単なテスト翻訳
+    # Simple test translation
     test_text = "Hello, world. This is a translation test."
-    print(f"テスト翻訳: {test_text}")
+    print(f"Test translation: {test_text}")
 
     translated = translate_text_with_cache(
-        test_text, api_key, model="claude-3-5-haiku", source_lang="en", target_lang="ja"
+        test_text, api_key, source_lang="en", target_lang="ja"
     )
 
-    print(f"翻訳結果: {translated}")
+    print(f"Translation result: {translated}")
 
-# エクスポートする関数と変数
+# Export functions and variables
 __all__ = [
     "get_available_models",
     "fetch_available_models",
