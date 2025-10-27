@@ -1,6 +1,3 @@
-了解しました。必要最低限の修正版を作成します：
-
-```markdown
 # DocTranslator / LangTranslator
 
 DocTranslator / LangTranslatorは、GenAI HUB APIを使用してテキスト翻訳や、PowerPoint (.pptx)、Word (.docx)、Excel (.xlsx)、PDFファイルを翻訳するウェブベースの翻訳サービスです。
