@@ -23,7 +23,14 @@ from typing import Dict, Optional
 from datetime import datetime
 
 # Import configuration module
-from app.config import save_api_key, get_api_key, api_key_exists, save_api_settings, api_settings_exist
+from app.config import (
+    save_api_key,
+    get_api_key,
+    api_key_exists,
+    save_api_settings,
+    api_settings_exist,
+    get_default_model,
+)
 
 # Logging configuration
 logging.basicConfig(
@@ -61,9 +68,9 @@ try:
     from app.core.translator import translate_document, LANGUAGES
     from app.config import api_settings_exist
     
-    # API設定の存在チェック
+    # Check API settings existence
     if api_settings_exist():
-        # API設定がある場合のみモデル一覧を動的取得
+        # Dynamically fetch model list only if API settings exist
         try:
             from app.core.translator import fetch_available_models
             logger.info("API settings found. Fetching available models...")
@@ -74,7 +81,7 @@ try:
             logger.info("Setting models to empty due to fetch failure")
             AVAILABLE_MODELS = {}
     else:
-        # API設定がない場合はモデル一覧を空にする
+        # Set models list to empty if no API settings
         logger.info("No API settings found. Models list will be empty until API is configured.")
         AVAILABLE_MODELS = {}
     
@@ -82,7 +89,7 @@ try:
     
 except ImportError as e:
     logger.error(f"Failed to import translation module: {e}")
-    # インポートエラーの場合も空にする
+    # Set to empty on import error
     AVAILABLE_MODELS = {}
     LANGUAGES = {
         "ja": "Japanese",
@@ -99,7 +106,7 @@ except ImportError as e:
     logger.warning("Models list set to empty due to import error")
 except Exception as e:
     logger.error(f"Unexpected error during initialization: {e}")
-    # 予期しないエラーでもモデル一覧は空にする
+    # Set models list to empty on unexpected error
     AVAILABLE_MODELS = {}
     logger.warning("Models list set to empty due to initialization error")
 
@@ -129,7 +136,7 @@ LOGS_DIR = Path("logs")
 for directory in [UPLOAD_DIR, DOWNLOAD_DIR, LOGS_DIR]:
     directory.mkdir(exist_ok=True)
 
-# 翻訳タスク管理用の辞書
+# Dictionary for managing translation tasks
 active_translations = {}
 
 # WebSocket connection manager
@@ -148,7 +155,7 @@ class ConnectionManager:
             del self.active_connections[client_id]
             logger.debug(f"Client {client_id} disconnected")
 
-            # クライアントの切断時に翻訳タスクをキャンセル
+            # Cancel translation task when client disconnects
             if client_id in active_translations:
                 active_translations[client_id]["cancelled"] = True
                 logger.info(
@@ -158,7 +165,7 @@ class ConnectionManager:
     async def send_progress(self, client_id: str, progress: float, message: str):
         if client_id in self.active_connections:
             try:
-                # クライアントの翻訳がキャンセルされていたら進捗を送信しない
+                # Don't send progress if client's translation is cancelled
                 if (
                     client_id in active_translations
                     and active_translations[client_id]["cancelled"]
@@ -202,26 +209,26 @@ async def startup_event():
     logger.info(f"Debug mode: {DEBUG}")
     logger.info(f"Log level: {LOG_LEVEL}")
 
-    # 仮想ディスプレイの開始
+    # Start virtual display
     try:
-        # 既存のXvfbプロセスを確認
+        # Check for existing Xvfb process
         result = subprocess.run(["pgrep", "Xvfb"], capture_output=True)
         if result.returncode != 0:
-            # Xvfbが動いていない場合は開始
+            # Start Xvfb if not running
             subprocess.Popen(
                 ["Xvfb", ":99", "-screen", "0", "1024x768x24", "-ac", "+extension", "GLX"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL
             )
-            # 少し待機
+            # Wait a bit
             await asyncio.sleep(2)
-            logger.info("仮想ディスプレイ (Xvfb) を開始しました")
+            logger.info("Virtual display (Xvfb) started")
         else:
-            logger.info("仮想ディスプレイは既に動作中です")
+            logger.info("Virtual display is already running")
     except Exception as e:
-        logger.warning(f"仮想ディスプレイの開始に失敗: {e}")
+        logger.warning(f"Failed to start virtual display: {e}")
 
-    # LibreOfficeのテスト
+    # Test LibreOffice
     try:
         result = subprocess.run(
             ["libreoffice", "--headless", "--version"],
@@ -230,11 +237,11 @@ async def startup_event():
             timeout=10
         )
         if result.returncode == 0:
-            logger.info(f"LibreOffice確認成功: {result.stdout.strip()}")
+            logger.info(f"LibreOffice check successful: {result.stdout.strip()}")
         else:
-            logger.warning(f"LibreOffice確認失敗: {result.stderr}")
+            logger.warning(f"LibreOffice check failed: {result.stderr}")
     except Exception as e:
-        logger.error(f"LibreOffice確認エラー: {e}")
+        logger.error(f"LibreOffice check error: {e}")
 
     # Check directory existence
     for dir_name in ["uploads", "downloads", "logs"]:
@@ -270,7 +277,7 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Failed to clean up temporary files: {e}")
 
-# 翻訳タスクをキャンセルするエンドポイント
+# Endpoint to cancel translation task
 @app.post("/api/cancel-translation/{client_id}")
 async def cancel_translation(client_id: str):
     """Cancel an ongoing translation"""
@@ -340,7 +347,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            # クライアントからのメッセージを処理
+            # Process messages from client
             if data == "cancel":
                 if client_id in active_translations:
                     active_translations[client_id]["cancelled"] = True
@@ -365,7 +372,7 @@ async def get_models():
     try:
         from app.config import api_settings_exist
         
-        # API設定がない場合は空のモデル一覧を返す
+        # Return empty models list if no API settings
         if not api_settings_exist():
             logger.debug("No API settings found. Returning empty models list.")
             return {
@@ -373,19 +380,19 @@ async def get_models():
                 "error": "API settings not configured. Please configure API key and URL first."
             }
         
-        # API設定がある場合は最新のモデル一覧を取得
+        # Fetch latest models list if API settings exist
         from app.core.translator import fetch_available_models
         models = fetch_available_models()
         
-        # グローバル変数も更新
+        # Update global variable
         global AVAILABLE_MODELS
         AVAILABLE_MODELS = models
         
         return {"models": models}
         
     except Exception as e:
-        logger.error(f"モデル一覧取得エラー: {e}")
-        # エラーの場合も空のモデル一覧を返す
+        logger.error(f"Models list fetch error: {e}")
+        # Return empty models list on error
         return {
             "models": {}, 
             "error": f"Failed to fetch models: {str(e)}"
@@ -399,7 +406,7 @@ async def refresh_models():
     try:
         from app.config import api_settings_exist
         
-        # API設定チェック
+        # Check API settings
         if not api_settings_exist():
             raise HTTPException(
                 status_code=400, 
@@ -409,7 +416,7 @@ async def refresh_models():
         from app.core.translator import fetch_available_models
         models = fetch_available_models()
         
-        # グローバル変数を更新
+        # Update global variable
         global AVAILABLE_MODELS
         AVAILABLE_MODELS = models
         
@@ -418,7 +425,7 @@ async def refresh_models():
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"モデル一覧更新エラー: {e}")
+        logger.error(f"Models list update error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to refresh models: {str(e)}")
 
 
@@ -437,7 +444,7 @@ async def get_status():
         "debug_mode": DEBUG,
     }
 
-# API設定エンドポイントを追加
+# Add API settings endpoint
 @app.post("/api/save-api-settings")
 async def save_api_settings_endpoint(request: Request, api_key: str = Form(...), api_url: str = Form(...)):
     """Save API settings endpoint"""
@@ -457,7 +464,7 @@ async def save_api_settings_endpoint(request: Request, api_key: str = Form(...),
         logger.info(f"API settings save result: {result}")
 
         if result:
-            # 保存成功後、API設定が実際に設定されているか確認
+            # Check if API settings are actually set after successful save
             from app.config import api_settings_exist
             if api_settings_exist():
                 return JSONResponse(
@@ -480,7 +487,7 @@ async def save_api_settings_endpoint(request: Request, api_key: str = Form(...),
 async def check_api_settings():
     """Check if API settings are configured"""
     try:
-        # 環境変数を再読み込み
+        # Reload environment variables
         from app.config import load_env_file, api_settings_exist, get_api_key, get_api_url
 
         load_env_file()
@@ -489,7 +496,7 @@ async def check_api_settings():
         api_key = get_api_key()
         api_url = get_api_url()
 
-        # マスクされたAPIキーをログに出力（デバッグ用）
+        # Output masked API key to log (for debugging)
         masked_key = (
             "****"
             if not api_key
@@ -510,13 +517,17 @@ async def translate_file(
     request: Request,
     file: UploadFile = File(...),
     api_key: str = Form(None),
-    model: str = Form("claude-3-5-haiku"),
+    model: str = Form(None),
     source_lang: str = Form("en"),
     target_lang: str = Form("ja"),
     ai_instruction: str = Form(""),
     client_id: str = Form(...),
 ):
     """Handle file translation requests"""
+    # Auto-select model if not specified
+    if model is None:
+        model = get_default_model()
+    
     logger.debug("Translation request received:")
     logger.debug(f"File name: {file.filename}")
     logger.debug(f"Model: {model}")
@@ -524,10 +535,10 @@ async def translate_file(
     logger.debug(f"Target language: {target_lang}")
     logger.debug(f"Client ID: {client_id}")
 
-    # クライアントの翻訳状態を初期化
+    # Initialize client's translation state
     active_translations[client_id] = {"cancelled": False}
     
-    # 変数を初期化
+    # Initialize variables
     extracted_filename = None
     translated_filename = None
 
@@ -595,7 +606,7 @@ async def translate_file(
 
             logger.debug(f"File saved: {input_path}")
 
-            # クライアント接続状態を監視する関数
+            # Function to monitor client connection state
             async def check_client_connected():
                 try:
                     while True:
@@ -607,13 +618,13 @@ async def translate_file(
                 except Exception as e:
                     logger.error(f"Connection check error: {e}")
 
-            # バックグラウンドでクライアント接続を監視
+            # Monitor client connection in background
             background_tasks.add_task(check_client_connected)
 
             # Progress callback function
             async def progress_callback(progress: float):
                 try:
-                    # 中止されていたら進捗送信をスキップ
+                    # Skip progress send if cancelled
                     if (
                         client_id in active_translations
                         and active_translations[client_id]["cancelled"]
@@ -633,7 +644,7 @@ async def translate_file(
             def safe_progress_callback(progress: float):
                 """Thread-safe progress callback"""
                 try:
-                    # 中止されていたら進捗送信をスキップ
+                    # Skip progress send if cancelled
                     if (
                         client_id in active_translations
                         and active_translations[client_id]["cancelled"]
@@ -656,7 +667,7 @@ async def translate_file(
             # Send initial progress
             await manager.send_progress(client_id, 0.01, "Preparing translation...")
 
-            # 中止状態をチェックする関数
+            # Function to check cancellation state
             def check_cancelled():
                 return (
                     client_id in active_translations
@@ -681,31 +692,31 @@ async def translate_file(
                     ),
                 )
 
-                # 中止された場合は早期リターン
+                # Return early if cancelled
                 if check_cancelled():
                     logger.info(f"Translation for client {client_id} was cancelled")
                     if input_path.exists():
                         input_path.unlink()
                     return {"success": False, "message": "Translation was cancelled"}
 
-                # 結果の処理
+                # Process result
                 if isinstance(result, tuple) and len(result) == 3:
                     extracted_file, translated_file, docx_path = result
-                    # DOCXファイルが返された場合（PDF変換失敗）
+                    # DOCX file returned (PDF conversion failed)
                     
-                    # ファイル名を正しく設定（修正）
+                    # Set filename correctly (fix)
                     docx_filename = os.path.basename(docx_path)
-                    # ファイルIDを含む実際のファイル名を生成
+                    # Generate actual filename including file ID
                     actual_docx_filename = f"{file_id}_{docx_filename}"
                     actual_docx_path = DOWNLOAD_DIR / actual_docx_filename
                     
-                    # DOCXファイルを正しい場所にコピー
+                    # Copy DOCX file to correct location
                     if os.path.exists(docx_path) and not os.path.exists(actual_docx_path):
                         import shutil
                         shutil.copy2(docx_path, actual_docx_path)
-                        logger.info(f"DOCXファイルをコピーしました: {docx_path} -> {actual_docx_path}")
+                        logger.info(f"DOCX file copied: {docx_path} -> {actual_docx_path}")
                     
-                    # ファイル名を設定
+                    # Set filenames
                     extracted_filename = (
                         Path(extracted_file).name if extracted_file else None
                     )
@@ -738,10 +749,10 @@ async def translate_file(
                         "target_language": target_lang,
                     }
                 else:
-                    # 通常の翻訳結果（2つの要素）
+                    # Normal translation result (2 elements)
                     extracted_file, translated_file = result
                     
-                    # ファイル名を設定
+                    # Set filenames
                     extracted_filename = (
                         Path(extracted_file).name if extracted_file else None
                     )
@@ -778,11 +789,11 @@ async def translate_file(
             except ValueError as ve:
                 # PDF conversion error case
                 if "Failed to convert DOCX to PDF" in str(ve) or "PDFからDOCXへの変換に失敗" in str(ve) or "PDF翻訳に失敗しました" in str(ve):
-                    # DOCXファイル名を生成
+                    # Generate DOCX filename
                     docx_filename = output_filename.replace(".pdf", ".docx")
                     docx_output_path = DOWNLOAD_DIR / f"{file_id}_{docx_filename}"
                     
-                    # DOCXファイルが存在するかチェック
+                    # Check if DOCX file exists
                     if docx_output_path.exists():
                         await manager.send_progress(
                             client_id, 1.0, "PDF conversion failed: Providing DOCX file instead"
@@ -862,7 +873,7 @@ async def translate_file(
         except Exception as e:
             logger.warning(f"Failed to delete temporary file: {e}")
 
-        # クライアントの翻訳状態をクリーンアップ
+        # Clean up client's translation state
         if client_id in active_translations:
             del active_translations[client_id]
             logger.debug(f"Cleaned up translation state for client {client_id}")

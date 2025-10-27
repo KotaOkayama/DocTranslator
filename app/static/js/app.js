@@ -45,7 +45,7 @@ function initializeWebSocket() {
 }
 
 
-// モデル読み込み機能
+// Load models function
 async function loadModels() {
     try {
         console.log('Loading models from API...');
@@ -67,33 +67,30 @@ async function loadModels() {
         
         const models = data.models || {};
         
-        // モデルが空の場合の処理
+        // Handle empty models
         if (Object.keys(models).length === 0) {
-            // エラーメッセージがある場合は表示
             if (data.error) {
-                showError(`モデル一覧が取得できませんでした: ${data.error}`);
+                showError(`Failed to load models: ${data.error}`);
             }
             
-            // プレースホルダーオプションを追加
             const placeholderOption = document.createElement('option');
             placeholderOption.value = '';
-            placeholderOption.textContent = 'API設定が必要です';
+            placeholderOption.textContent = 'API configuration required';
             placeholderOption.disabled = true;
             placeholderOption.selected = true;
             modelSelect.appendChild(placeholderOption);
             
-            // 翻訳ボタンを無効化
             const submitButton = document.getElementById('submitButton');
             if (submitButton) {
                 submitButton.disabled = true;
-                submitButton.title = 'API設定を完了してください';
+                submitButton.title = 'Please complete API configuration';
             }
             
             console.log('No models available. API configuration required.');
             return;
         }
         
-        // モデルオプションをアルファベット順で追加
+        // Add model options in alphabetical order
         Object.entries(models)
             .sort(([a], [b]) => a.localeCompare(b))
             .forEach(([modelId, displayName]) => {
@@ -103,55 +100,48 @@ async function loadModels() {
                 modelSelect.appendChild(option);
             });
         
-        // デフォルトモデルを選択（Claude 3.5 Haikuを優先）
-        const defaultModel = 'claude-3-5-haiku';
-        if (models[defaultModel]) {
-            modelSelect.value = defaultModel;
-        } else {
-            // Claude 3.5 Haikuがない場合は最初のモデル（アルファベット順で最初）を選択
-            const sortedModelIds = Object.keys(models).sort();
-            if (sortedModelIds.length > 0) {
-                modelSelect.value = sortedModelIds[0];
-            }
+        // Select default model (first in alphabetical order)
+        const sortedModelIds = Object.keys(models).sort();
+        if (sortedModelIds.length > 0) {
+            modelSelect.value = sortedModelIds[0];
+            console.log(`Default model selected: ${sortedModelIds[0]}`);
         }
         
-        // 翻訳ボタンを有効化
+        // Enable translation button
         const submitButton = document.getElementById('submitButton');
         if (submitButton) {
             submitButton.disabled = false;
             submitButton.title = '';
         }
         
-        console.log('Models loaded successfully (alphabetical order):', Object.keys(models).sort());
-        showSuccess('モデル一覧を読み込みました');
+        console.log('Models loaded successfully (alphabetical order):', sortedModelIds);
+        showSuccess('Models loaded successfully');
         
     } catch (error) {
         console.error('Model loading error:', error);
-        showError(`モデル一覧の読み込みに失敗しました: ${error.message}`);
+        showError(`Failed to load models: ${error.message}`);
         
-        // エラー時も空の状態にする
         const modelSelect = document.getElementById('model');
         if (modelSelect) {
             modelSelect.innerHTML = '';
             const errorOption = document.createElement('option');
             errorOption.value = '';
-            errorOption.textContent = 'モデル読み込みエラー';
+            errorOption.textContent = 'Model loading error';
             errorOption.disabled = true;
             errorOption.selected = true;
             modelSelect.appendChild(errorOption);
         }
         
-        // 翻訳ボタンを無効化
         const submitButton = document.getElementById('submitButton');
         if (submitButton) {
             submitButton.disabled = true;
-            submitButton.title = 'API設定を確認してください';
+            submitButton.title = 'Please check API settings';
         }
     }
 }
 
 
-// モデル更新ボタンの追加
+// Add refresh models button
 function addRefreshModelsButton() {
     const modelSelect = document.getElementById('model');
     if (!modelSelect) {
@@ -161,7 +151,7 @@ function addRefreshModelsButton() {
     
     const modelContainer = modelSelect.parentElement;
     
-    // 既存のボタンがあれば削除
+    // Remove existing button if present
     const existingButton = modelContainer.querySelector('.refresh-models-btn');
     if (existingButton) {
         existingButton.remove();
@@ -170,38 +160,38 @@ function addRefreshModelsButton() {
     const refreshButton = document.createElement('button');
     refreshButton.type = 'button';
     refreshButton.className = 'refresh-models-btn btn btn-outline-secondary btn-sm';
-    refreshButton.innerHTML = '🔄 更新';
-    refreshButton.title = 'モデル一覧を更新';
+    refreshButton.innerHTML = '🔄 Refresh';
+    refreshButton.title = 'Refresh models list';
     refreshButton.style.marginLeft = '10px';
     
     refreshButton.addEventListener('click', async () => {
         try {
             refreshButton.disabled = true;
-            refreshButton.innerHTML = '🔄 更新中...';
+            refreshButton.innerHTML = '🔄 Refreshing...';
             
             const response = await fetch('/api/models/refresh');
             const data = await response.json();
             
             if (!response.ok) {
-                throw new Error(data.detail || 'モデル更新に失敗しました');
+                throw new Error(data.detail || 'Failed to refresh models');
             }
             
-            showSuccess('モデル一覧を更新しました');
-            await loadModels(); // モデル一覧を再読み込み
+            showSuccess('Models list refreshed successfully');
+            await loadModels();
             
         } catch (error) {
             console.error('Model refresh error:', error);
-            showError(`モデル更新エラー: ${error.message}`);
+            showError(`Model refresh error: ${error.message}`);
         } finally {
             refreshButton.disabled = false;
-            refreshButton.innerHTML = '🔄 更新';
+            refreshButton.innerHTML = '🔄 Refresh';
         }
     });
     
     modelContainer.appendChild(refreshButton);
 }
 
-// 言語読み込み機能
+// Load languages function
 async function loadLanguages() {
     try {
         console.log('Loading languages from API...');
@@ -223,11 +213,11 @@ async function loadLanguages() {
         
         const languages = data.languages || {};
         
-        // 既存のオプションをクリア
+        // Clear existing options
         sourceLangSelect.innerHTML = '';
         targetLangSelect.innerHTML = '';
         
-        // 言語オプションを追加
+        // Add language options
         Object.entries(languages).forEach(([langCode, langName]) => {
             const sourceOption = document.createElement('option');
             sourceOption.value = langCode;
@@ -240,7 +230,7 @@ async function loadLanguages() {
             targetLangSelect.appendChild(targetOption);
         });
         
-        // デフォルト言語を設定
+        // Set default languages
         sourceLangSelect.value = 'en'; // English
         targetLangSelect.value = 'ja'; // Japanese
         
@@ -248,11 +238,11 @@ async function loadLanguages() {
         
     } catch (error) {
         console.error('Language loading error:', error);
-        showError(`言語一覧の読み込みに失敗しました: ${error.message}`);
+        showError(`Failed to load languages: ${error.message}`);
     }
 }
 
-// 新しい通知関数を追加（既存のshowError, showSuccess, showWarningと統合）
+// New notification function
 function showStatus(message, type = 'info') {
     switch(type) {
         case 'error':
@@ -266,7 +256,6 @@ function showStatus(message, type = 'info') {
             break;
         case 'info':
         default:
-            // 新しい情報メッセージ用の関数
             showInfo(message);
             break;
     }
@@ -293,7 +282,7 @@ function showInfo(message) {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Page loaded, initializing...');
     
-    // デバッグ: 要素の存在確認
+    // Debug: Check element existence
     const apiSettingsSection = document.getElementById('apiSettingsSection');
     const uploadForm = document.getElementById('uploadForm');
     
@@ -310,11 +299,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initializeWebSocket();
     
-    // API設定チェックを少し遅延させる
+    // Delay API settings check slightly
     setTimeout(async () => {
         await checkApiSettings();
         
-        // API設定が完了している場合のみモデルと言語を読み込み
+        // Load models and languages only if API settings are complete
         const uploadFormVisible = uploadForm && uploadForm.style.display !== 'none';
         if (uploadFormVisible) {
             await loadModels();
@@ -366,13 +355,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // ファイル入力の検証イベントリスナー
+    // File input validation event listener
     const fileInput = document.getElementById('file');
     if (fileInput) {
         fileInput.addEventListener('change', validateFileInput);
     }
     
-    // 言語選択の検証イベントリスナー
+    // Language selection validation event listener
     const sourceLangSelect = document.getElementById('sourceLang');
     const targetLangSelect = document.getElementById('targetLang');
     if (sourceLangSelect) {
@@ -416,7 +405,7 @@ async function checkApiSettings() {
         }
     } catch (error) {
         console.error('Error checking API settings:', error);
-        // エラーが発生した場合はAPI設定画面を表示
+        // Show API settings form on error
         const apiSettingsSection = document.getElementById('apiSettingsSection');
         const uploadForm = document.getElementById('uploadForm');
         if (apiSettingsSection) apiSettingsSection.style.display = 'block';
@@ -473,7 +462,7 @@ async function saveApiSettings() {
             // Re-check API settings status
             await checkApiSettings();
             
-            // API設定が保存された後にモデルと言語を読み込み
+            // Load models and languages after API settings are saved
             await loadModels();
             await loadLanguages();
             addRefreshModelsButton();
@@ -532,7 +521,7 @@ async function updateApiSettings() {
             if (settingsModal) settingsModal.style.display = 'none';
             modalApiKey.value = '';
             
-            // API設定が更新された後にモデルと言語を読み込み
+            // Load models and languages after API settings are updated
             await loadModels();
             await loadLanguages();
         } else {
@@ -639,7 +628,12 @@ async function uploadFile() {
 
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
-    formData.append('model', modelSelect?.value || 'claude-3-5-haiku');
+    
+    // Send model only if selected (server will auto-select if not provided)
+    if (modelSelect?.value) {
+        formData.append('model', modelSelect.value);
+    }
+    
     formData.append('source_lang', sourceLangSelect?.value || 'en');
     formData.append('target_lang', targetLangSelect?.value || 'ja');
     formData.append('client_id', clientId);
@@ -647,7 +641,7 @@ async function uploadFile() {
 
     console.log('Form data prepared:', {
         filename: fileInput.files[0].name,
-        model: modelSelect?.value,
+        model: modelSelect?.value || 'auto-select',
         source_lang: sourceLangSelect?.value,
         target_lang: targetLangSelect?.value,
         client_id: clientId
