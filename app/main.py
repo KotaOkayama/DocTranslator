@@ -1,3 +1,11 @@
+# app/main.py
+"""
+DocTranslator / LangTranslator - 統合版メインアプリケーション
+
+Document Translation (PPTX, DOCX, PDF, XLSX) + Text Translation
+テキスト翻訳には言語自動検出・音声機能・履歴管理を追加
+"""
+
 from fastapi import (
     FastAPI,
     File,
@@ -10,17 +18,21 @@ from fastapi import (
     BackgroundTasks,
 )
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Response
 
 import os
 import uuid
 import asyncio
 import subprocess
+import sqlite3
 from pathlib import Path
 import logging
 import sys
 from typing import Dict, Optional
 from datetime import datetime
+import csv
+from io import StringIO
+from contextlib import contextmanager
 
 # Import configuration module
 from app.config import (
@@ -30,6 +42,15 @@ from app.config import (
     save_api_settings,
     api_settings_exist,
     get_default_model,
+    get_api_url,
+)
+
+# 言語検出ユーティリティのインポート（テキスト翻訳専用）
+from app.utils.language_detector import (
+    detect_language,
+    get_language_name,
+    suggest_target_language,
+    validate_language_pair
 )
 
 # Logging configuration
@@ -62,6 +83,60 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 CSS_DIR = os.path.join(STATIC_DIR, "css")
 JS_DIR = os.path.join(STATIC_DIR, "js")
 
+# Text translation database path（テキスト翻訳専用）
+TEXT_TRANSLATION_DB = Path("text_translations.db")
+
+# データベース接続管理（テキスト翻訳専用）
+@contextmanager
+def get_db_connection():
+    """テキスト翻訳用データベース接続のコンテキストマネージャー"""
+    conn = sqlite3.connect(TEXT_TRANSLATION_DB)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def init_text_translation_db():
+    """テキスト翻訳データベースの初期化"""
+    try:
+        if not TEXT_TRANSLATION_DB.exists():
+            logger.info("Initializing text translation database...")
+            
+            # schema.sqlを読み込んで実行
+            schema_path = Path("schema.sql")
+            if schema_path.exists():
+                with get_db_connection() as conn:
+                    with open(schema_path, 'r', encoding='utf-8') as f:
+                        conn.executescript(f.read())
+                    conn.commit()
+                logger.info("Text translation database initialized successfully")
+            else:
+                logger.warning("schema.sql not found, creating basic schema")
+                with get_db_connection() as conn:
+                    conn.execute('''
+                        CREATE TABLE IF NOT EXISTS text_translations (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            timestamp TEXT NOT NULL,
+                            source_lang TEXT NOT NULL,
+                            target_lang TEXT NOT NULL,
+                            source_text TEXT NOT NULL,
+                            translated_text TEXT NOT NULL,
+                            model TEXT NOT NULL,
+                            auto_detected BOOLEAN DEFAULT 0,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
+                    # インデックス作成
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_text_translations_timestamp ON text_translations(timestamp DESC)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_text_translations_source_lang ON text_translations(source_lang)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_text_translations_target_lang ON text_translations(target_lang)')
+                    conn.execute('CREATE INDEX IF NOT EXISTS idx_text_translations_model ON text_translations(model)')
+                    conn.commit()
+        else:
+            logger.info("Text translation database already exists")
+    except Exception as e:
+        logger.error(f"Failed to initialize text translation database: {e}")
 
 # Import translation module
 try:
@@ -110,17 +185,17 @@ except Exception as e:
     AVAILABLE_MODELS = {}
     logger.warning("Models list set to empty due to initialization error")
 
-
 # Debug information for static file directory
 logger.debug(f"Static file directory: {STATIC_DIR}")
 logger.debug(f"Static directory exists: {os.path.exists(STATIC_DIR)}")
-logger.debug(f"Static directory contents: {os.listdir(STATIC_DIR)}")
+if os.path.exists(STATIC_DIR):
+    logger.debug(f"Static directory contents: {os.listdir(STATIC_DIR)}")
 
 # Create application
 app = FastAPI(
-    title="DocTranslator",
-    description="Document Translation Service",
-    version="0.1.0",
+    title="DocTranslator / LangTranslator",
+    description="Document and Text Translation Service",
+    version="1.0.0",
     docs_url="/docs" if DEBUG else None,
     redoc_url="/redoc" if DEBUG else None,
 )
@@ -201,13 +276,17 @@ def check_libreoffice():
         logger.error(f"LibreOffice check error: {e}")
     return False
 
-# Application startup event
+# ===== Application Startup Event =====
+
 @app.on_event("startup")
 async def startup_event():
     """Application startup process"""
-    logger.info("DocTranslator application has started")
+    logger.info("DocTranslator / LangTranslator application has started")
     logger.info(f"Debug mode: {DEBUG}")
     logger.info(f"Log level: {LOG_LEVEL}")
+
+    # Initialize text translation database（テキスト翻訳専用）
+    init_text_translation_db()
 
     # Start virtual display
     try:
@@ -262,7 +341,7 @@ async def startup_event():
     else:
         logger.info(f"LibreOffice is available: {libreoffice_info}")
 
-    logger.info("Application preparation completed")
+    logger.info("Application preparation completed with text translation support")
 
     # Temporary directory cleanup
     try:
@@ -277,7 +356,8 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Failed to clean up temporary files: {e}")
 
-# Endpoint to cancel translation task
+# ===== Document Translation Endpoints =====
+
 @app.post("/api/cancel-translation/{client_id}")
 async def cancel_translation(client_id: str):
     """Cancel an ongoing translation"""
@@ -314,30 +394,64 @@ def get_progress_message(progress: float) -> str:
 async def health_check():
     """Health check endpoint"""
     logger.info("Received health check request")
-    return {"status": "ok", "version": "0.1.0", "timestamp": datetime.now().isoformat()}
+    return {"status": "ok", "version": "1.0.0", "timestamp": datetime.now().isoformat()}
 
-# Root page endpoint
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     """Serve main page"""
     try:
         index_path = os.path.join(STATIC_DIR, "index.html")
+        logger.debug(f"Serving index.html from: {index_path}")
+        
         with open(index_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+            content = f.read()
+            
+        # Add cache control headers for better performance
+        return HTMLResponse(
+            content=content,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
     except FileNotFoundError:
         logger.error(f"index.html not found: {index_path}")
         return HTMLResponse(
             content="""
-        <html>
-            <head>
-                <title>DocTranslator</title>
-            </head>
-            <body>
-                <h1>DocTranslator</h1>
-                <p>Static files not found.</p>
-            </body>
-        </html>
-        """
+            <html>
+                <head>
+                    <title>DocTranslator - Error</title>
+                    <style>
+                        body {
+                            font-family: Arial, sans-serif;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        }
+                        .error-container {
+                            background: white;
+                            padding: 40px;
+                            border-radius: 20px;
+                            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                            text-align: center;
+                        }
+                        h1 { color: #dc3545; }
+                        p { color: #6c757d; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-container">
+                        <h1>⚠️ Error</h1>
+                        <p>Static files not found. Please check your installation.</p>
+                    </div>
+                </body>
+            </html>
+            """,
+            status_code=500
         )
 
 @app.websocket("/ws/{client_id}")
@@ -363,8 +477,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"WebSocket error: {e}")
         manager.disconnect(client_id)
 
-
-# API endpoints
+# ===== API Endpoints =====
 
 @app.get("/api/models")
 async def get_models():
@@ -398,8 +511,6 @@ async def get_models():
             "error": f"Failed to fetch models: {str(e)}"
         }
 
-
-
 @app.get("/api/models/refresh")
 async def refresh_models():
     """Refresh available models list"""
@@ -428,7 +539,6 @@ async def refresh_models():
         logger.error(f"Models list update error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to refresh models: {str(e)}")
 
-
 @app.get("/api/languages")
 async def get_languages():
     """Return list of supported languages"""
@@ -439,12 +549,11 @@ async def get_status():
     """Return application status"""
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "1.0.0",
         "timestamp": datetime.now().isoformat(),
         "debug_mode": DEBUG,
     }
 
-# Add API settings endpoint
 @app.post("/api/save-api-settings")
 async def save_api_settings_endpoint(request: Request, api_key: str = Form(...), api_url: str = Form(...)):
     """Save API settings endpoint"""
@@ -523,12 +632,17 @@ async def translate_file(
     ai_instruction: str = Form(""),
     client_id: str = Form(...),
 ):
-    """Handle file translation requests"""
+    """
+    Handle file translation requests
+    
+    注意: このエンドポイントはドキュメント翻訳専用です。
+         言語自動検出は実行されません。
+    """
     # Auto-select model if not specified
     if model is None:
         model = get_default_model()
     
-    logger.debug("Translation request received:")
+    logger.debug("[Document Translation] Translation request received:")
     logger.debug(f"File name: {file.filename}")
     logger.debug(f"Model: {model}")
     logger.debug(f"Source language: {source_lang}")
@@ -595,7 +709,7 @@ async def translate_file(
         input_path = UPLOAD_DIR / f"{file_id}_{safe_filename}"
 
         logger.info(
-            f"Starting translation process: {safe_filename}, Model: {model}, Languages: {source_lang} -> {target_lang}"
+            f"[Document Translation] Starting translation process: {safe_filename}, Model: {model}, Languages: {source_lang} -> {target_lang}"
         )
 
         try:
@@ -704,7 +818,7 @@ async def translate_file(
                     extracted_file, translated_file, docx_path = result
                     # DOCX file returned (PDF conversion failed)
                     
-                    # Set filename correctly (fix)
+                    # Set filename correctly
                     docx_filename = os.path.basename(docx_path)
                     # Generate actual filename including file ID
                     actual_docx_filename = f"{file_id}_{docx_filename}"
@@ -901,7 +1015,7 @@ async def download_file(filename: str):
 
         return FileResponse(
             path=file_path,
-            filename=original_filename,  # Filename without unique ID
+            filename=original_filename,
             media_type="text/plain",
         )
 
@@ -918,7 +1032,7 @@ async def download_file(filename: str):
 
         return FileResponse(
             path=file_path,
-            filename=original_filename,  # Filename without unique ID
+            filename=original_filename,
             media_type="text/plain",
         )
 
@@ -946,9 +1060,234 @@ async def download_file(filename: str):
 
         return FileResponse(
             path=file_path,
-            filename=original_filename,  # Filename without unique ID
+            filename=original_filename,
             media_type=media_type,
         )
+
+# ===== Text Translation Endpoints（言語自動検出・履歴管理機能付き） =====
+
+@app.post("/api/detect-language")
+async def detect_language_endpoint(request: Request):
+    """
+    テキストから言語を自動検出（テキスト翻訳専用）
+    
+    注意: このエンドポイントはテキスト翻訳でのみ使用されます。
+         ドキュメント翻訳では使用されません。
+    """
+    try:
+        data = await request.json()
+        text = data.get('text', '')
+        
+        if not text:
+            raise HTTPException(status_code=400, detail="Text is required")
+        
+        detected_lang = detect_language(text)
+        lang_name = get_language_name(detected_lang)
+        suggested_target = suggest_target_language(detected_lang)
+        
+        logger.debug(f"[Text Translation] Language detected: {detected_lang} ({lang_name})")
+        
+        return {
+            "success": True,
+            "detected_language": detected_lang,
+            "language_name": lang_name,
+            "suggested_target": suggested_target
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Text Translation] Language detection error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/translate-text")
+async def translate_text_endpoint(
+    text: str = Form(...),
+    source_lang: str = Form("en"),
+    target_lang: str = Form("ja"),
+    model: str = Form(None),
+    auto_detect: bool = Form(True),
+):
+    """
+    テキスト翻訳エンドポイント（言語検出・履歴保存機能付き）
+    
+    注意: 言語自動検出はテキスト翻訳でのみ動作します。
+         ドキュメント翻訳では使用されません。
+    """
+    try:
+        # モデル自動選択
+        if model is None:
+            model = get_default_model()
+        
+        # 言語検出（テキスト翻訳のみ）
+        was_auto_detected = False
+        original_source_lang = source_lang
+        
+        if auto_detect:
+            detected_lang = detect_language(text)
+            
+            # 検出された言語がソース言語と異なる場合は更新
+            if detected_lang != source_lang:
+                logger.info(f"[Text Translation] Auto-detected language: {detected_lang} (was: {source_lang})")
+                source_lang = detected_lang
+                # ターゲット言語も自動調整
+                target_lang = suggest_target_language(source_lang)
+                was_auto_detected = True
+        
+        # 言語ペアの検証
+        is_valid, error_msg = validate_language_pair(source_lang, target_lang)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # API設定取得
+        api_key = get_api_key()
+        if not api_key:
+            raise HTTPException(status_code=401, detail="API key is not set")
+        
+        logger.info(f"[Text Translation] Starting translation: {source_lang} -> {target_lang}, Model: {model}")
+        
+        # テキスト翻訳実行
+        from app.core.text_translator import translate_text_chunks
+        translated_text = translate_text_chunks(
+            text=text,
+            api_key=api_key,
+            model=model,
+            source_lang=source_lang,
+            target_lang=target_lang
+        )
+        
+        # データベースに保存（テキスト翻訳専用）
+        try:
+            with get_db_connection() as conn:
+                conn.execute('''
+                    INSERT INTO text_translations 
+                    (timestamp, source_lang, target_lang, source_text, translated_text, model, auto_detected)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    datetime.now().isoformat(),
+                    get_language_name(source_lang),
+                    get_language_name(target_lang),
+                    text,
+                    translated_text,
+                    model,
+                    1 if was_auto_detected else 0
+                ))
+                conn.commit()
+            logger.debug("[Text Translation] Translation saved to database")
+        except Exception as db_error:
+            logger.warning(f"[Text Translation] Failed to save to database: {db_error}")
+            # データベース保存失敗は致命的エラーではない
+        
+        return {
+            "success": True,
+            "translated": translated_text,
+            "source_lang": get_language_name(source_lang),
+            "target_lang": get_language_name(target_lang),
+            "detected_lang": source_lang if was_auto_detected else None,
+            "auto_detected": was_auto_detected,
+            "model": model
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Text Translation] Translation error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/text-translation-history")
+async def get_text_translation_history():
+    """テキスト翻訳履歴を取得（テキスト翻訳専用）"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute('''
+                SELECT * FROM text_translations 
+                ORDER BY timestamp DESC 
+                LIMIT 100
+            ''')
+            entries = [dict(row) for row in cursor.fetchall()]
+        
+        logger.debug(f"[Text Translation] Retrieved {len(entries)} history entries")
+        return {"success": True, "entries": entries}
+        
+    except Exception as e:
+        logger.error(f"[Text Translation] Error fetching history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/clear-text-translation-history")
+async def clear_text_translation_history():
+    """テキスト翻訳履歴をクリア（テキスト翻訳専用）"""
+    try:
+        with get_db_connection() as conn:
+            conn.execute('DELETE FROM text_translations')
+            conn.commit()
+        
+        logger.info("[Text Translation] History cleared")
+        return {"success": True}
+        
+    except Exception as e:
+        logger.error(f"[Text Translation] Error clearing history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/export-text-translation-history")
+async def export_text_translation_history():
+    """テキスト翻訳履歴をCSVでエクスポート（テキスト翻訳専用）- 修正版"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.execute('''
+                SELECT 
+                    timestamp,
+                    source_lang,
+                    target_lang,
+                    source_text,
+                    translated_text,
+                    model,
+                    auto_detected
+                FROM text_translations 
+                ORDER BY timestamp DESC
+            ''')
+            
+            output = StringIO()
+            writer = csv.writer(output)
+            
+            # ヘッダー
+            writer.writerow([
+                'Timestamp', 
+                'Source Language', 
+                'Target Language',
+                'Original Text', 
+                'Translated Text', 
+                'Model', 
+                'Auto Detected'
+            ])
+            
+            # データ - インデックスでアクセス
+            for row in cursor.fetchall():
+                writer.writerow([
+                    row[0],  # timestamp
+                    row[1],  # source_lang
+                    row[2],  # target_lang
+                    row[3],  # source_text
+                    row[4],  # translated_text
+                    row[5],  # model
+                    'Yes' if row[6] else 'No'  # auto_detected
+                ])
+        
+        csv_data = '\ufeff' + output.getvalue()
+        csv_data = csv_data.encode('utf-8')
+        
+        logger.info("[Text Translation] History exported successfully")
+        
+        return Response(
+            content=csv_data,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=text_translation_history.csv"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"[Text Translation] Error exporting history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Main application entry point
 if __name__ == "__main__":
