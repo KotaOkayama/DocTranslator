@@ -13,10 +13,17 @@ pip install --no-cache-dir pandas>=1.3.0
 python3 -c "import openpyxl; print('openpyxl version:', openpyxl.__version__)"
 python3 -c "import pandas; print('pandas version:', pandas.__version__)"
 
-# Start virtual display
+# Start virtual display (check if already running)
 echo "Starting Xvfb..."
-Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX &
-sleep 3
+if pgrep -x "Xvfb" > /dev/null; then
+    echo "Xvfb is already running"
+else
+    # Remove stale lock file if exists
+    rm -f /tmp/.X99-lock
+    Xvfb :99 -screen 0 1024x768x24 -ac +extension GLX &
+    sleep 3
+    echo "Xvfb started"
+fi
 
 # Test LibreOffice
 echo "Testing LibreOffice..."
