@@ -1,20 +1,40 @@
-# DocTranslator
-DocTranslator is a web-based document translation service that uses the GenAI HUB API to translate PowerPoint (.pptx), Word (.docx), Excel (.xlsx) and PDF files.
+英語版の完全なREADME.mdを出力します：
+
+```markdown
+# DocTranslator / LangTranslator
+
+DocTranslator / LangTranslator is a web-based translation service that uses the GenAI HUB API to translate text and files including PowerPoint (.pptx), Word (.docx), Excel (.xlsx), and PDF documents.
+
+## 🎯 Two Translation Modes
+
+### 📄 Document Translation (DocTranslator)
+- Translate PPTX, DOCX, XLSX, and PDF files
+- Preserve original formatting and layout
+
+### 💬 Text Translation (LangTranslator)
+- Real-time text translation
+- **Automatic language detection** 🔍
+- Text-to-speech functionality 🔊
+- Translation history with CSV export (UTF-8 BOM)
 
 ## UI Screenshots
 
 ### API Configuration Screen (First Launch)
 ![API Configuration Screen](images/API.png)
 
-### Main UI Screen
-![Main UI Screen](images/UI.png)
+### Main UI (Document Translation Mode)
+![Document Translation UI](images/UI1.png)
+
+### Main UI (Text Translation Mode)
+![Text Translation UI](images/UI2.png)
 
 ## 🚀 Features
 
-- 📄 **Multi-format Support**: Translate PPTX, DOCX, XLSX and PDF files
-- 🤖 **AI-Powered**: Models Available on GenAI HUB
+- 📄 **Intuitive UI**: Familiar interface similar to popular translation services
+- 📄 **Multi-format Support**: Translate PPTX, DOCX, XLSX, and PDF files
+- 🤖 **AI-Powered**: Supports models available on GenAI HUB
 - 🌐 **Web Interface**: Clean and responsive UI with real-time progress display
-- ⚡ **PDF Processing**: LibreOffice integration for high-quality PDF conversion
+- ⚡ **PDF Processing**: High-quality PDF conversion with LibreOffice integration
 - 🐳 **Containerized**: Easy development and deployment with Docker
 
 ## 🎯 Supported Languages
@@ -33,7 +53,7 @@ DocTranslator is a web-based document translation service that uses the GenAI HU
 ## 📋 Requirements
 
 ### Required Software
-- Docker (e.g., Rancher Desktop)
+- Docker (Rancher Desktop, etc.)
 - GenAI Hub API URL
 - GenAI Hub API Key
 
@@ -50,6 +70,7 @@ docker pull ghcr.io/kotaokayama/doctranslator:latest
 ```bash
 docker run -d -p 8000:8000 --name doctranslator ghcr.io/kotaokayama/doctranslator:latest
 ```
+- If you want to change the port for accessing the application, please modify only the port number on the left side (host side)
 
 3. **Access Application**:
 - Open http://localhost:8000 in your browser
@@ -65,7 +86,7 @@ docker stop doctranslator
 docker start doctranslator
 ```
 
-### Using Docker Compose
+### Using Docker Compose (Recommended)
 
 1. **Create docker-compose.yml**:
 ```yaml
@@ -74,15 +95,20 @@ version: '3.8'
 services:
   doctranslator:
     image: ghcr.io/kotaokayama/doctranslator:latest
+    container_name: doctranslator
     ports:
       - "8000:8000"
     volumes:
       - ./uploads:/app/uploads
       - ./downloads:/app/downloads
       - ./logs:/app/logs
+      - doctranslator-data:/app/data  # Database persistence
     restart: unless-stopped
     environment:
       - TZ=Asia/Tokyo
+
+volumes:
+  doctranslator-data:
 ```
 
 2. **Start Container**:
@@ -104,11 +130,11 @@ git clone https://github.com/kotaokayama/DocTranslator.git
 cd DocTranslator
 ```
 
-2. **Set Environment Variables**:
+2. **Configure Environment Variables**:
 ```bash
 cp .env.example .env
-# Edit .env as needed
-# API Key and API URL can be configured through UI on first launch
+# Edit .env to adjust debug settings as needed
+# API Key and API URL can be configured via UI on first launch
 ```
 
 3. **Start Application**:
@@ -119,7 +145,7 @@ docker-compose -f docker-compose.dev.yml build
 # Start application
 docker-compose -f docker-compose.dev.yml up
 
-# Or using make command
+# Or use make command
 make start
 ```
 
@@ -162,28 +188,28 @@ uvicorn app.main:app --reload
 
 ```
 DocTranslator/
-├── app/                     # Application code
-│   ├── core/               # Core business logic
-│   │   ├── __init__.py
-│   │   └── translator.py   # Translation logic
-│   ├── static/             # Static files
-│   │   ├── css/
-│   │   ├── js/
-│   │   └── index.html
-│   └── utils/              # Utility functions
-├── docker/                 # Docker configuration
-│   ├── Dockerfile         # Production Dockerfile
-│   └── Dockerfile.dev     # Development Dockerfile
-├── docs/                   # Documentation
-├── tests/                 # Test files
-│   ├── __init__.py
-│   ├── conftest.py       # Test configuration and fixtures
-│   ├── integration/      # Integration tests
-│   └── unit/            # Unit tests
-├── downloads/             # Download files
-├── uploads/              # Upload files
-├── logs/                 # Log files
-└── start.sh              # Startup script
+├── app/                          # Application code
+│   ├── main.py                   # FastAPI application
+│   ├── config.py                 # API configuration management
+│   ├── init_db.py                # Database initialization
+│   ├── schema.sql                # Database schema
+│   ├── core/                     # Core business logic
+│   │   ├── translator.py         # Document translation logic
+│   │   └── text_translator.py    # Text translation logic
+│   ├── static/                   # Static files
+│   │   ├── css/style.css
+│   │   ├── js/app.js
+│   │   ├── index.html
+│   │   └── favicon.svg
+│   └── utils/                    # Utility functions
+│       └── language_detector.py  # Language detection (text translation only)
+├── docker/                       # Docker configuration
+│   ├── Dockerfile                # Production
+│   └── Dockerfile.dev            # Development
+├── tests/                        # Test files
+├── downloads/                    # Download files
+├── uploads/                      # Upload files
+└── logs/                         # Log files
 ```
 
 ## 🧪 Testing
@@ -241,7 +267,7 @@ docker-compose up
 ### Common Issues
 
 1. **API Configuration Issues**:
-- Verify API Key and API URL are correctly set
+- Verify API Key and API URL are correctly configured
 - Check API Key permissions
 - Verify API URL format (e.g., https://api.anthropic.com/v1/chat/completions)
 
@@ -253,7 +279,15 @@ docker-compose up
 3. **Docker-related Issues**:
 - Verify Docker Desktop is running
 - Check container logs
-- Try rebuilding container
+- Try rebuilding the container
+
+4. **Text Translation Language Detection Not Working**:
+- Input sufficient text length (minimum 10 characters recommended)
+- Check browser console for errors (F12 key)
+
+5. **Text-to-Speech Not Working**:
+- Verify browser supports Speech Synthesis API (latest Chrome, Firefox, Safari, Edge)
+- Verify target language voice is installed on the system
 
 ### Debugging
 
