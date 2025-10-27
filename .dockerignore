@@ -20,6 +20,10 @@ venv/
 .coverage
 htmlcov/
 .mypy_cache/
+.ruff_cache/
+*.pyc
+*.pyo
+*.pyd
 
 # アプリケーション固有のディレクトリ
 uploads/*
@@ -29,12 +33,129 @@ downloads/*
 logs/*
 !logs/.gitkeep
 
+# データベースファイル（開発環境のデータを含めない）
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+text_translations.db
+text_translations.db-journal
+translation_cache.json
+
 # 開発関連
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.editorconfig
 
 # OS関連
 .DS_Store
+._.DS_Store
+**/.DS_Store
 Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+
+# テスト関連
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+test-results/
+test-reports/
+*.cover
+
+# ドキュメント関連
+docs/
+*.md
+!README.md
+LICENSE
+CONTRIBUTING.md
+
+# Docker関連（ビルド時に不要）
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# CI/CD関連
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+Jenkinsfile
+
+# 開発用スクリプト
+scripts/dev/
+dev_scripts/
+scratch/
+playground/
+
+# バックアップファイル
+*.bak
+*.backup
+*.old
+*_backup
+*_old
+
+# 一時ファイル
+*.tmp
+*.temp
+tmp/
+temp/
+
+# ログファイル（実行時に生成されるため）
+*.log
+
+# Node.js（フロントエンド開発用、本番では不要）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+package-lock.json
+yarn.lock
+
+# エディタ設定
+.editorconfig
+.prettierrc
+.eslintrc*
+
+# その他の設定ファイル
+.gitattributes
+.mailmap
+
+# 大きなメディアファイル
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.iso
+
+# 圧縮ファイル
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# プロファイリング結果
+*.prof
+*.lprof
+
+# メモリダンプ
+*.dump
+*.dmp
+
+# Makefileの出力
+*.o
+*.a
+
+# セキュリティ関連（念のため）
+secrets/
+credentials/
+*.pem
+*.key
+*.crt
+*.cer
