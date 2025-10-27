@@ -1,6 +1,3 @@
-英語版の完全なREADME.mdを出力します：
-
-```markdown
 # DocTranslator / LangTranslator
 
 DocTranslator / LangTranslator is a web-based translation service that uses the GenAI HUB API to translate text and files including PowerPoint (.pptx), Word (.docx), Excel (.xlsx), and PDF documents.
