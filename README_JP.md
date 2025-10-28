@@ -6,7 +6,7 @@ DocTranslator / LangTranslatorは、GenAI HUB APIを使用してテキスト翻�
 
 ### 📄 ドキュメント翻訳 (DocTranslator)
 - PPTX、DOCX、XLSX、PDFファイルの翻訳
-- 元の書式・レイアウトを維持
+- 元の書式・レイアウトを可能な限り維持
 
 ### 💬 テキスト翻訳 (LangTranslator)
 - リアルタイムテキスト翻訳
