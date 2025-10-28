@@ -6,7 +6,7 @@ DocTranslator / LangTranslator is a web-based translation service that uses the 
 
 ### 📄 Document Translation (DocTranslator)
 - Translate PPTX, DOCX, XLSX, and PDF files
-- Preserve original formatting and layout
+- Maintain the original format and layout as much as possible
 
 ### 💬 Text Translation (LangTranslator)
 - Real-time text translation
