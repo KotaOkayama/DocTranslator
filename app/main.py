@@ -195,7 +195,7 @@ if os.path.exists(STATIC_DIR):
 app = FastAPI(
     title="DocTranslator / LangTranslator",
     description="Document and Text Translation Service",
-    version="1.0.0",
+    version="2.1.0",
     docs_url="/docs" if DEBUG else None,
     redoc_url="/redoc" if DEBUG else None,
 )
@@ -394,7 +394,7 @@ def get_progress_message(progress: float) -> str:
 async def health_check():
     """Health check endpoint"""
     logger.info("Received health check request")
-    return {"status": "ok", "version": "1.0.0", "timestamp": datetime.now().isoformat()}
+    return {"status": "ok", "version": "2.1.0", "timestamp": datetime.now().isoformat()}
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
@@ -549,7 +549,7 @@ async def get_status():
     """Return application status"""
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "2.1.0",
         "timestamp": datetime.now().isoformat(),
         "debug_mode": DEBUG,
     }
