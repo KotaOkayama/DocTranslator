@@ -1,4 +1,4 @@
-# app/main.py
+# ai.pp/main.py
 """
 DocTranslator / LangTranslator - 統合版メインアプリケーション
 
@@ -681,10 +681,23 @@ async def translate_file(
                 detail="Unsupported file format. Only PPTX, DOCX, PDF, XLSX are supported.",
             )
 
-        # Model validation
+        # Model validation - if AVAILABLE_MODELS is empty, try to re-fetch
+        global AVAILABLE_MODELS
+        if not AVAILABLE_MODELS and api_settings_exist():
+            logger.warning("AVAILABLE_MODELS is empty, attempting to re-fetch models...")
+            try:
+                from app.core.translator import fetch_available_models
+                AVAILABLE_MODELS = fetch_available_models()
+                logger.info(f"Re-fetched models: {list(AVAILABLE_MODELS.keys())}")
+            except Exception as fetch_err:
+                logger.error(f"Failed to re-fetch models: {fetch_err}")
+
         if model not in AVAILABLE_MODELS:
-            logger.error(f"Unsupported model: {model}")
-            raise HTTPException(status_code=400, detail=f"Unsupported model: {model}")
+            if not AVAILABLE_MODELS:
+                logger.warning(f"AVAILABLE_MODELS is empty, allowing model '{model}' to proceed")
+            else:
+                logger.error(f"Unsupported model: {model}")
+                raise HTTPException(status_code=400, detail=f"Unsupported model: {model}")
 
         # Language validation
         if source_lang not in LANGUAGES or target_lang not in LANGUAGES:
