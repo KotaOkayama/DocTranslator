@@ -1732,8 +1732,8 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
 # ============================================================
 # PDF翻訳ユーティリティ関数（PyMuPDF redactアプローチ用）
 # ============================================================
-def _needs_translation(text: str) -> bool:
-    """翻訳が必要なテキストかどうかを判定"""
+def _needs_translation(text: str, source_lang: str = "en") -> bool:
+    """翻訳が必要なテキストかどうかを判定（source_langに応じて判定基準を変更）"""
     if not text or not text.strip():
         return False
     text_stripped = text.strip()
@@ -1742,14 +1742,34 @@ def _needs_translation(text: str) -> bool:
     has_alpha = any(c.isalpha() for c in text_stripped)
     if not has_alpha:
         return False
-    japanese_chars = sum(1 for c in text_stripped if '\u3000' <= c <= '\u9fff' or '\uff00' <= c <= '\uffef')
+
+    # CJK文字（日本語・中国語・韓国語）の割合を計算
+    cjk_chars = sum(1 for c in text_stripped if '\u3000' <= c <= '\u9fff' or '\uff00' <= c <= '\uffef')
     total_chars = len(text_stripped)
-    if total_chars > 0 and japanese_chars / total_chars > 0.4:
-        return False
+    cjk_ratio = cjk_chars / total_chars if total_chars > 0 else 0
+
+    # ASCII英字の割合を計算
     alpha_count = sum(1 for c in text_stripped if c.isalpha() and ord(c) < 128)
-    if total_chars > 0 and alpha_count / total_chars < 0.1:
+    ascii_ratio = alpha_count / total_chars if total_chars > 0 else 0
+
+    # ソース言語がCJK系（日本語・中国語・韓国語）の場合
+    if source_lang in ("ja", "zh", "ko"):
+        # CJK文字が10%以上含まれていれば翻訳対象
+        if cjk_ratio >= 0.1:
+            return True
+        # CJK文字が少なくてもアルファベットがあれば翻訳対象
+        if has_alpha:
+            return True
         return False
-    return True
+    else:
+        # ソース言語が英語等の場合（従来の動作）
+        # CJK文字が40%以上なら翻訳不要（既に目的言語に近い）
+        if cjk_ratio > 0.4:
+            return False
+        # ASCII英字が10%未満なら翻訳不要
+        if ascii_ratio < 0.1:
+            return False
+        return True
 
 def _clean_text_for_font(text: str) -> str:
     """フォントで表示できない特殊文字を除去する"""
@@ -1810,7 +1830,7 @@ def _translate_texts_batch_for_pdf(
     indices_to_translate = []
 
     for i, text in enumerate(texts):
-        if _needs_translation(text):
+        if _needs_translation(text, source_lang):
             texts_to_translate.append(text)
             indices_to_translate.append(i)
 
@@ -2392,7 +2412,7 @@ def translate_pptx(
                 if shape.has_text_frame:
                     for para in shape.text_frame.paragraphs:
                         for run in para.runs:
-                            if _needs_translation(run.text):
+                            if _needs_translation(run.text, source_lang):
                                 runs_to_translate.append(run)
 
                 # テーブル処理（shape_type == 19）
@@ -2404,7 +2424,7 @@ def translate_pptx(
                                 if cell.text_frame:
                                     for para in cell.text_frame.paragraphs:
                                         for run in para.runs:
-                                            if _needs_translation(run.text):
+                                            if _needs_translation(run.text, source_lang):
                                                 runs_to_translate.append(run)
                     except Exception as e:
                         logger.debug(f"Table processing error: {e}")
