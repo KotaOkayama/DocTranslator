@@ -1663,6 +1663,11 @@ function clearOutputText() {
     stopTargetSpeaking();
 }
 
+function clearBothTexts() {
+    clearInputText();
+    clearOutputText();
+}
+
 // ===== 言語スワップ =====
 function swapLanguages() {
     const textSourceLang = document.getElementById('textSourceLang');

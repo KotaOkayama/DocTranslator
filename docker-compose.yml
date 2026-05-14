@@ -1,10 +1,6 @@
-version: '3.8'
-
 services:
   document-translator:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: doctranslator-document-translator:latest
     ports:
       - "8000:8000"
     environment:
@@ -13,6 +9,7 @@ services:
       - TZ=Asia/Tokyo
       - GENAI_HUB_API_KEY=${GENAI_HUB_API_KEY}
     volumes:
+      - ./app:/app/app
       - ./uploads:/app/uploads
       - ./downloads:/app/downloads
       - ./logs:/app/logs

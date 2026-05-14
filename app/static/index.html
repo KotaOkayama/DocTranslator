@@ -281,9 +281,6 @@
                                     <button type="button" class="btn btn-sm btn-secondary" onclick="pasteFromClipboard()">
                                         <i class="fas fa-clipboard"></i> Paste
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="clearInputText()">
-                                        <i class="fas fa-times"></i> Clear
-                                    </button>
                                 </div>
                             </div>
 
@@ -322,15 +319,15 @@
                                     <button type="button" class="btn btn-sm btn-secondary" onclick="copyToClipboard()">
                                         <i class="fas fa-copy"></i> Copy
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="clearOutputText()">
-                                        <i class="fas fa-times"></i> Clear
-                                    </button>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 翻訳ボタン -->
                         <div class="text-translation-actions-centered">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="clearBothTexts()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
                             <button type="button" class="btn btn-info btn-swap" onclick="swapLanguages()">
                                 <i class="fas fa-exchange-alt"></i> Swap Languages
                             </button>

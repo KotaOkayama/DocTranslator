@@ -30,6 +30,20 @@ from dotenv import load_dotenv
 import pandas as pd
 import requests
 
+# PyMuPDF (for PDF translation with layout preservation)
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+
+# openpyxl (for XLSX translation with format preservation)
+try:
+    import openpyxl
+    OPENPYXL_AVAILABLE = True
+except ImportError:
+    OPENPYXL_AVAILABLE = False
+
 import concurrent.futures
 
 # Logging configuration
@@ -60,13 +74,13 @@ def get_api_key():
 # Keywords to filter out models not suitable for translation
 EXCLUDED_MODEL_KEYWORDS = [
     "copilot",
-    "documentation", 
+    "documentation",
+    "coding",
     "jira",
     "ngsiem",
     "dom-data-extractor",
     "wiki",
     "compintel",
-    "coding"
 ]
 
 def filter_translation_models(models: List[str]) -> List[str]:
@@ -1715,6 +1729,164 @@ def convert_docx_to_pdf(docx_path: str, pdf_path: str) -> str:
     
     return docx_copy_path
 
+# ============================================================
+# PDF翻訳ユーティリティ関数（PyMuPDF redactアプローチ用）
+# ============================================================
+def _needs_translation(text: str) -> bool:
+    """翻訳が必要なテキストかどうかを判定"""
+    if not text or not text.strip():
+        return False
+    text_stripped = text.strip()
+    if len(text_stripped) < 2:
+        return False
+    has_alpha = any(c.isalpha() for c in text_stripped)
+    if not has_alpha:
+        return False
+    japanese_chars = sum(1 for c in text_stripped if '\u3000' <= c <= '\u9fff' or '\uff00' <= c <= '\uffef')
+    total_chars = len(text_stripped)
+    if total_chars > 0 and japanese_chars / total_chars > 0.4:
+        return False
+    alpha_count = sum(1 for c in text_stripped if c.isalpha() and ord(c) < 128)
+    if total_chars > 0 and alpha_count / total_chars < 0.1:
+        return False
+    return True
+
+def _clean_text_for_font(text: str) -> str:
+    """フォントで表示できない特殊文字を除去する"""
+    problematic_chars = [
+        '\u200b', '\u200c', '\u200d', '\u200e', '\u200f',
+        '\ufeff', '\u00ad', '\u2028', '\u2029',
+    ]
+    for ch in problematic_chars:
+        text = text.replace(ch, '')
+    text = text.replace('\t', ' ')
+    text = re.sub(r'  +', ' ', text)
+    return text.strip()
+
+def _get_bg_from_drawings(drawings: list, bbox) -> Optional[tuple]:
+    """描画オブジェクトから背景色を取得"""
+    if not PYMUPDF_AVAILABLE:
+        return None
+    best_area = 0.0
+    best_fill = None
+    for d in drawings:
+        if d.get("type") != "f":
+            continue
+        fill = d.get("fill")
+        if fill is None:
+            continue
+        drect = d.get("rect")
+        if drect is None:
+            continue
+        drect = fitz.Rect(drect)
+        inter = bbox & drect
+        if inter.is_empty:
+            continue
+        area = inter.width * inter.height
+        if area > best_area:
+            best_area = area
+            best_fill = tuple(fill[:3])
+    return best_fill
+
+def _is_dark_color(color: tuple) -> bool:
+    """色が暗いかどうかを判定（輝度 < 0.4 なら暗い）"""
+    r, g, b = color[0], color[1], color[2]
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 0.4
+
+def _translate_texts_batch_for_pdf(
+    texts: List[str],
+    api_key: str,
+    model: str,
+    source_lang: str,
+    target_lang: str,
+    ai_instruction: str = "",
+) -> List[str]:
+    """PDFページ内のテキストをバッチ翻訳する"""
+    if not texts:
+        return texts
+
+    results = list(texts)
+    texts_to_translate = []
+    indices_to_translate = []
+
+    for i, text in enumerate(texts):
+        if _needs_translation(text):
+            texts_to_translate.append(text)
+            indices_to_translate.append(i)
+
+    if not texts_to_translate:
+        return results
+
+    # バッチ翻訳
+    batch_size = 15
+    for batch_start in range(0, len(texts_to_translate), batch_size):
+        batch = texts_to_translate[batch_start:batch_start + batch_size]
+        batch_indices = indices_to_translate[batch_start:batch_start + batch_size]
+
+        items_json = json.dumps(
+            [{"id": i, "text": t} for i, t in enumerate(batch)],
+            ensure_ascii=False,
+            indent=2
+        )
+
+        lang_names = LANGUAGES
+        src_name = lang_names.get(source_lang, source_lang)
+        tgt_name = lang_names.get(target_lang, target_lang)
+
+        prompt = f"""Translate the following JSON list of texts from {src_name} to {tgt_name}.
+Return the result in the same JSON format (do not change the id field).
+Keep technical terms and product names as-is.
+Output only the translated JSON, no explanations.
+"""
+        if ai_instruction:
+            prompt += f"\nAdditional instructions: {ai_instruction}\n"
+        prompt += f"\nInput JSON:\n{items_json}\n\nTranslated JSON:"
+
+        try:
+            result = translate_text_with_genai_hub(
+                prompt, api_key, model, source_lang="__raw__", target_lang=target_lang
+            )
+        except Exception as e:
+            logger.warning(f"Batch translation error: {e}. Falling back to individual translation.")
+            result = None
+
+        if result:
+            try:
+                json_match = re.search(r'\[.*\]', result, re.DOTALL)
+                if json_match:
+                    translated_list = json.loads(json_match.group())
+                    for item in translated_list:
+                        item_id = item.get("id")
+                        item_text = item.get("text", "")
+                        if item_id is not None and item_id < len(batch):
+                            orig_idx = batch_indices[item_id]
+                            results[orig_idx] = item_text
+                else:
+                    for idx, text in zip(batch_indices, batch):
+                        try:
+                            t = translate_text_with_cache(text, api_key, model, source_lang, target_lang, ai_instruction)
+                            results[idx] = t
+                        except Exception:
+                            pass
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"JSON parse error: {e}, falling back to individual translation")
+                for idx, text in zip(batch_indices, batch):
+                    try:
+                        t = translate_text_with_cache(text, api_key, model, source_lang, target_lang, ai_instruction)
+                        results[idx] = t
+                    except Exception:
+                        pass
+        else:
+            for idx, text in zip(batch_indices, batch):
+                try:
+                    t = translate_text_with_cache(text, api_key, model, source_lang, target_lang, ai_instruction)
+                    results[idx] = t
+                except Exception:
+                    pass
+
+    return results
+
+
 def translate_pdf(
     input_path: str,
     output_path: str,
@@ -1728,12 +1900,15 @@ def translate_pdf(
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    Translate PDF file.
-    Follow translator.py.old.py processing flow:
-    1. Convert PDF to DOCX with convert_pdf_to_docx()
-    2. Execute DOCX translation with translate_docx()
-    3. Convert translated DOCX to PDF with convert_docx_to_pdf()
-    
+    Translate PDF file using PyMuPDF redact approach.
+    Preserves layout, background colors, and font colors.
+
+    Approach:
+    1. Copy original PDF pages (maintaining background/images)
+    2. Delete original English text with redact annotation
+    3. Detect background color and repaint appropriately
+    4. Overlay translated text with Japanese font
+
     Args:
         input_path: Input PDF file path
         output_path: Output PDF file path
@@ -1745,7 +1920,7 @@ def translate_pdf(
         save_text_files_flag: Whether to save text files
         ai_instruction: Supplementary instructions for AI
         check_cancelled: Function to check cancellation status
-        
+
     Returns:
         (extracted text file path, translated text file path)
     """
@@ -1753,92 +1928,238 @@ def translate_pdf(
     if model is None:
         from app.config import get_default_model
         model = get_default_model()
-    
-    logger.info(f"Starting PDF translation: {input_path} -> {output_path}")
-    
+
+    # Get API key
+    if not api_key:
+        api_key = os.environ.get("GENAI_HUB_API_KEY")
+
+    logger.info(f"Starting PDF translation (redact approach): {input_path} -> {output_path}")
+
+    if not PYMUPDF_AVAILABLE:
+        logger.error("PyMuPDF (fitz) is not installed. Cannot translate PDF with layout preservation.")
+        raise ImportError("PyMuPDF is required for PDF translation. Install with: pip install PyMuPDF")
+
     if ai_instruction:
         logger.info(f"Supplementary instructions for AI: {ai_instruction}")
-    
-    # Generate temporary file paths
-    temp_dir = os.path.dirname(output_path)
-    base_name = os.path.splitext(os.path.basename(input_path))[0]
-    temp_docx_input = os.path.join(temp_dir, f"{base_name}_temp_input.docx")
-    temp_docx_output = os.path.join(temp_dir, f"{base_name}_temp_output.docx")
-    
+
+    # Japanese font path for PDF
+    JP_FONT_PATHS = [
+        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/Arial Unicode MS.ttf",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Light.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    ]
+
+    jp_font_data = None
+    for font_path in JP_FONT_PATHS:
+        try:
+            with open(font_path, 'rb') as f:
+                jp_font_data = f.read()
+            logger.info(f"  Japanese font loaded: {font_path}")
+            break
+        except Exception:
+            continue
+
+    if jp_font_data is None:
+        logger.error("  No Japanese font found. Cannot translate PDF.")
+        shutil.copy2(input_path, output_path)
+        return None, None
+
+    output_dir = os.path.dirname(output_path)
+    base_filename = os.path.splitext(os.path.basename(output_path))[0]
+    extracted_file = None
+    translated_file = None
+
     try:
-        # Check cancellation
         if check_cancelled and check_cancelled():
-            logger.info("Translation cancelled")
             return None, None
-        
-        # Update progress
+
         if progress_callback:
             progress_callback(0.05)
-            
-        # 1. Convert PDF to DOCX
-        logger.info("Converting PDF to DOCX...")
-        convert_pdf_to_docx(input_path, temp_docx_input)
-        
-        # Check cancellation
-        if check_cancelled and check_cancelled():
-            logger.info("Translation cancelled")
-            return None, None
-        
-        if progress_callback:
-            progress_callback(0.15)
-        
-        # 2. Translate DOCX
-        logger.info("Translating DOCX...")
-        extracted_file, translated_file = translate_docx(
-            temp_docx_input,
-            temp_docx_output,
-            api_key,
-            model,
-            source_lang,
-            target_lang,
-            # Adjust progress callback to 15%~85% range
-            lambda p: progress_callback(0.15 + p * 0.7) if progress_callback else None,
-            save_text_files_flag,
-            ai_instruction,
-            check_cancelled
-        )
-        
-        # Check cancellation
-        if check_cancelled and check_cancelled():
-            logger.info("Translation cancelled")
-            return extracted_file, translated_file
-        
-        # 3. Convert translated DOCX to PDF
-        logger.info("Converting translated DOCX to PDF...")
-        final_output = convert_docx_to_pdf(temp_docx_output, output_path)
-        
+
+        doc = fitz.open(input_path)
+        total_pages = len(doc)
+        logger.info(f"  Pages: {total_pages}")
+
+        out_doc = fitz.open()
+        out_doc.insert_pdf(doc)
+
+        # Collect all text data for save_text_files
+        all_text_data = []
+
+        for page_num in range(total_pages):
+            if check_cancelled and check_cancelled():
+                logger.info("Translation cancelled")
+                doc.close()
+                out_doc.close()
+                return None, None
+
+            page = out_doc[page_num]
+            orig_page = doc[page_num]
+            logger.info(f"  Page {page_num + 1}/{total_pages} processing...")
+
+            drawings = orig_page.get_drawings()
+            blocks = orig_page.get_text("dict")["blocks"]
+            spans_to_translate = []
+
+            for block in blocks:
+                if block["type"] != 0:
+                    continue
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        if _needs_translation(span["text"]):
+                            spans_to_translate.append(span)
+
+            if not spans_to_translate:
+                if progress_callback:
+                    progress_callback(0.1 + (page_num + 1) / total_pages * 0.8)
+                continue
+
+            texts = [s["text"] for s in spans_to_translate]
+
+            # Collect original text for save_text_files
+            for i, span in enumerate(spans_to_translate):
+                all_text_data.append({
+                    "element_type": "pdf_text",
+                    "page_num": page_num,
+                    "block_num": 0,
+                    "line_num": i,
+                    "original_text": span["text"],
+                })
+
+            translated_texts = _translate_texts_batch_for_pdf(
+                texts, api_key, model, source_lang, target_lang, ai_instruction
+            )
+
+            # Update translated text in data
+            for i, (span, translated) in enumerate(zip(spans_to_translate, translated_texts)):
+                if i < len(all_text_data) and all_text_data[-(len(spans_to_translate) - i)]["original_text"] == span["text"]:
+                    all_text_data[-(len(spans_to_translate) - i)]["translated_text"] = translated
+
+            spans_info = []
+            for span, translated in zip(spans_to_translate, translated_texts):
+                original = span["text"]
+                if translated == original or not translated:
+                    continue
+
+                translated_clean = _clean_text_for_font(translated)
+                if not translated_clean:
+                    continue
+
+                bbox = fitz.Rect(span["bbox"])
+                bg_fill = _get_bg_from_drawings(drawings, bbox)
+                dark = _is_dark_color(bg_fill) if bg_fill is not None else False
+
+                color_int = span.get("color", 0)
+                if bg_fill is None:
+                    if color_int == 0:
+                        text_color = (0.0, 0.0, 0.0)
+                    else:
+                        r = ((color_int >> 16) & 0xFF) / 255
+                        g = ((color_int >> 8) & 0xFF) / 255
+                        b = (color_int & 0xFF) / 255
+                        text_color = (r, g, b)
+                elif dark:
+                    text_color = (1.0, 1.0, 1.0)
+                elif color_int == 0:
+                    text_color = (0.0, 0.0, 0.0)
+                else:
+                    r = ((color_int >> 16) & 0xFF) / 255
+                    g = ((color_int >> 8) & 0xFF) / 255
+                    b = (color_int & 0xFF) / 255
+                    text_color = (r, g, b)
+
+                font_size = max(span["size"] * 0.85, 6)
+                spans_info.append({
+                    "bbox": bbox,
+                    "translated": translated_clean,
+                    "text_color": text_color,
+                    "font_size": font_size,
+                    "fill_color": bg_fill,
+                    "dark": dark,
+                })
+
+            if not spans_info:
+                if progress_callback:
+                    progress_callback(0.1 + (page_num + 1) / total_pages * 0.8)
+                continue
+
+            # Redact original text
+            for info in spans_info:
+                page.add_redact_annot(info["bbox"])
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+            # Register Japanese font
+            page.insert_font(fontname="jp", fontbuffer=jp_font_data)
+
+            # Repaint background and insert translated text
+            for info in spans_info:
+                bbox = info["bbox"]
+                fill_color = info["fill_color"]
+                text_color = info["text_color"]
+                font_size = info["font_size"]
+                translated_clean = info["translated"]
+
+                if fill_color is not None:
+                    try:
+                        page.draw_rect(bbox, color=fill_color, fill=fill_color, overlay=True)
+                    except Exception:
+                        pass
+
+                try:
+                    page.insert_text(
+                        fitz.Point(bbox.x0, bbox.y1 - 1),
+                        translated_clean,
+                        fontname="jp",
+                        fontsize=font_size,
+                        color=text_color,
+                        overlay=True
+                    )
+                except Exception as e:
+                    logger.debug(f"Text insert error: {e}")
+                    fallback_color = (1.0, 1.0, 1.0) if info["dark"] else (0.0, 0.0, 0.0)
+                    try:
+                        page.insert_text(
+                            fitz.Point(bbox.x0, bbox.y1 - 1),
+                            translated_clean,
+                            fontname="jp",
+                            fontsize=font_size,
+                            color=fallback_color,
+                            overlay=True
+                        )
+                    except Exception as e2:
+                        logger.debug(f"Fallback insert error: {e2}")
+
+            if progress_callback:
+                progress_callback(0.1 + (page_num + 1) / total_pages * 0.8)
+
+        out_doc.save(output_path, garbage=4, deflate=True)
+        out_doc.close()
+        doc.close()
+
+        # Save text files
+        if save_text_files_flag and all_text_data:
+            import pandas as pd
+            text_df = pd.DataFrame(all_text_data)
+            if "translated_text" not in text_df.columns:
+                text_df["translated_text"] = text_df["original_text"]
+            extracted_file, translated_file = save_text_files(text_df, output_dir, base_filename)
+
         if progress_callback:
             progress_callback(1.0)
-            
-        # If final output is DOCX file (PDF conversion failed)
-        if final_output.endswith('.docx'):
-            logger.warning("PDF conversion failed. DOCX file will be provided.")
-            # Move DOCX file to appropriate location
-            if final_output != output_path.replace('.pdf', '.docx'):
-                shutil.move(final_output, output_path.replace('.pdf', '.docx'))
-        
-        logger.info(f"PDF translation complete: {output_path}")
+
+        logger.info(f"  PDF translation complete: {output_path}")
         return extracted_file, translated_file
-        
+
     except Exception as e:
-        logger.error(f"PDF translation error: {e}")
+        logger.error(f"PDF translation error ({input_path}): {e}", exc_info=True)
+        shutil.copy2(input_path, output_path)
+        logger.info("  Error occurred - copied original file")
         raise
-    finally:
-        # Delete temporary files
-        try:
-            if os.path.exists(temp_docx_input):
-                os.remove(temp_docx_input)
-                logger.debug(f"Deleted temporary file: {temp_docx_input}")
-            if os.path.exists(temp_docx_output):
-                os.remove(temp_docx_output)
-                logger.debug(f"Deleted temporary file: {temp_docx_output}")
-        except Exception as e:
-            logger.warning(f"Failed to delete temporary files: {e}")
 
 def translate_xlsx(
     input_path: str,
@@ -1853,7 +2174,9 @@ def translate_xlsx(
     check_cancelled: Optional[Callable] = None,
 ) -> tuple:
     """
-    Translate XLSX file.
+    Translate XLSX file using openpyxl to preserve layout and formatting.
+
+    Uses openpyxl directly (not pandas) to preserve cell formatting, styles, colors, etc.
 
     Args:
         input_path: Input Excel file path
@@ -1874,112 +2197,137 @@ def translate_xlsx(
     if model is None:
         from app.config import get_default_model
         model = get_default_model()
-    
-    logger.info(f"Starting Excel translation: {input_path} -> {output_path}")
+
+    # Get API key
+    if not api_key:
+        api_key = os.environ.get("GENAI_HUB_API_KEY")
+
+    logger.info(f"Starting Excel translation (layout-preserving): {input_path} -> {output_path}")
+
+    if not OPENPYXL_AVAILABLE:
+        logger.error("openpyxl is not installed. Cannot translate XLSX.")
+        raise ImportError("openpyxl is required for XLSX translation.")
+
+    output_dir = os.path.dirname(output_path)
+    base_filename = os.path.splitext(os.path.basename(output_path))[0]
+    extracted_file = None
+    translated_file = None
+    all_text_data = []
 
     try:
-        # Display progress
         if progress_callback:
-            progress_callback(0.1)
+            progress_callback(0.05)
 
-        # Read Excel file
-        excel = pd.read_excel(input_path, sheet_name=None, engine="openpyxl")
-        total_sheets = len(excel)
-        
-        # Extract text data and convert to DataFrame
-        text_data = []
-        for sheet_idx, (sheet_name, df) in enumerate(excel.items()):
+        # Load workbook preserving all formatting
+        wb = openpyxl.load_workbook(input_path)
+        total_sheets = len(wb.sheetnames)
+
+        for sheet_idx, sheet_name in enumerate(wb.sheetnames):
             if check_cancelled and check_cancelled():
                 return None, None
-                
-            for row_idx, row in df.iterrows():
-                for col_idx, value in row.items():
-                    if isinstance(value, str) and value.strip():
-                        text_data.append({
-                            'sheet_name': sheet_name,
-                            'row': row_idx,
-                            'column': col_idx,
-                            'original_text': value.strip()
-                        })
-            
-            if progress_callback:
-                progress_callback(0.1 + (sheet_idx / total_sheets * 0.2))
 
-        # Convert text data to DataFrame
-        text_df = pd.DataFrame(text_data)
+            ws_sheet = wb[sheet_name]
+            logger.info(f"  Sheet '{sheet_name}' processing...")
+
+            cells_to_translate = []
+            cell_refs = []
+
+            for row in ws_sheet.iter_rows():
+                for cell in row:
+                    if cell.value and isinstance(cell.value, str) and cell.value.strip():
+                        if _needs_translation(cell.value):
+                            cells_to_translate.append(cell.value)
+                            cell_refs.append(cell)
+                            all_text_data.append({
+                                'sheet_name': sheet_name,
+                                'original_text': cell.value.strip(),
+                            })
+
+            if progress_callback:
+                progress_callback(0.05 + (sheet_idx / total_sheets * 0.15))
+
+            if not cells_to_translate:
+                continue
+
+            logger.info(f"  Cells to translate: {len(cells_to_translate)}")
+
+            # Save extracted text files
+            if save_text_files_flag and all_text_data:
+                text_df = pd.DataFrame(all_text_data)
+                extracted_file, _ = save_text_files(text_df, output_dir, base_filename)
+
+            # Batch translate texts
+            translated_texts = _translate_texts_batch_for_pdf(
+                cells_to_translate,
+                api_key,
+                model,
+                source_lang,
+                target_lang,
+                ai_instruction
+            )
+
+            # Update cell values (preserving format)
+            for cell, translated in zip(cell_refs, translated_texts):
+                if translated and translated != cell.value:
+                    cell.value = translated
+
+            # Update translated text in data
+            for i, translated in enumerate(translated_texts):
+                data_idx = len(all_text_data) - len(cells_to_translate) + i
+                if 0 <= data_idx < len(all_text_data):
+                    all_text_data[data_idx]['translated_text'] = translated
+
+            if progress_callback:
+                progress_callback(0.2 + (sheet_idx + 1) / total_sheets * 0.75)
+
+        # Save workbook (preserves all formatting)
+        wb.save(output_path)
 
         # Save text files
-        output_dir = os.path.dirname(output_path)
-        base_filename = os.path.splitext(os.path.basename(output_path))[0]
-        extracted_file = None
-        translated_file = None
-
-        if save_text_files_flag:
-            extracted_file, _ = save_text_files(text_df, output_dir, base_filename)
-
-        # Translate text
-        text_df = translate_dataframe(
-            text_df,
-            api_key,
-            model,
-            source_lang,
-            target_lang,
-            lambda p: progress_callback(0.3 + p * 0.5) if progress_callback else None,
-            ai_instruction,
-            check_cancelled
-        )
-
-        if save_text_files_flag and 'translated_text' in text_df.columns:
-            _, translated_file = save_text_files(text_df, output_dir, base_filename)
-
-        # Reflect translation results in Excel
-        translated_excel = excel.copy()
-        for _, row in text_df.iterrows():
-            if check_cancelled and check_cancelled():
-                return extracted_file, translated_file
-                
-            if 'translated_text' in row and pd.notna(row['translated_text']):
-                sheet = translated_excel[row['sheet_name']]
-                sheet.at[row['row'], row['column']] = row['translated_text']
-
-        # Save translated Excel file
-        with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
-            for sheet_name, df in translated_excel.items():
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+        if save_text_files_flag and all_text_data:
+            text_df = pd.DataFrame(all_text_data)
+            if 'translated_text' not in text_df.columns:
+                text_df['translated_text'] = text_df['original_text']
+            extracted_file, translated_file = save_text_files(text_df, output_dir, base_filename)
 
         if progress_callback:
             progress_callback(1.0)
 
+        logger.info(f"  Excel translation complete: {output_path}")
         return extracted_file, translated_file
 
     except Exception as e:
-        logger.error(f"Excel translation error: {e}")
+        logger.error(f"Excel translation error: {e}", exc_info=True)
+        shutil.copy2(input_path, output_path)
+        logger.info("  Error occurred - copied original file")
         raise
+
 
 def translate_pptx(
     input_path: str,
     output_path: str,
+    source_lang: str,
+    target_lang: str,
     api_key: str = None,
+    api_url: str = None,
     model: str = None,
-    source_lang: str = "en",
-    target_lang: str = "ja",
-    progress_callback: Optional[Callable] = None,
-    save_text_files_flag: bool = True,
-    ai_instruction: str = "",
-    check_cancelled: Optional[Callable] = None,
+    progress_callback=None,
+    ai_instruction: str = None,
+    check_cancelled=None,
 ) -> tuple:
     """
-    Translate PPTX file.
+    Translate a PPTX file (run-level approach).
+    Translates text shapes, tables, and notes while preserving formatting.
 
     Args:
-        input_path: Input PPTX file path
-        output_path: Output PPTX file path
-        api_key: GenAI Hub API key
-        model: Model name to use
-        source_lang: Source language code
-        target_lang: Target language code
-        progress_callback: Callback function to report progress
-        save_text_files_flag: Whether to save text files
+        input_path: Input file path
+        output_path: Output file path
+        source_lang: Source language
+        target_lang: Target language
+        api_key: API key
+        api_url: API URL
+        model: Model name
+        progress_callback: Progress callback function
         ai_instruction: Supplementary instructions for AI
         check_cancelled: Function to check cancellation status
 
@@ -1990,7 +2338,7 @@ def translate_pptx(
     if model is None:
         from app.config import get_default_model
         model = get_default_model()
-    
+
     logger.info(f"Starting PPTX translation: {input_path} -> {output_path}")
     logger.info(f"Languages: {source_lang} -> {target_lang}, Model: {model}")
 
@@ -2006,74 +2354,140 @@ def translate_pptx(
             "API key is not set. Please check environment variable GENAI_HUB_API_KEY."
         )
 
-    # Check cancellation
     if check_cancelled and check_cancelled():
         logger.info("Translation cancelled")
         return None, None
 
-    # 1. Text extraction
-    df = extract_text_from_pptx(input_path, progress_callback)
-
-    # Check cancellation
-    if check_cancelled and check_cancelled():
-        logger.info("Translation cancelled")
-        return None, None
-
-    # Get output directory and base filename
     output_dir = os.path.dirname(output_path)
     base_filename = os.path.splitext(os.path.basename(output_path))[0]
-
-    # Save extracted text
     extracted_file = None
     translated_file = None
+    all_text_data = []
 
-    if save_text_files_flag:
-        extracted_file, _ = save_text_files(df, output_dir, base_filename)
+    try:
+        from pptx import Presentation
 
-    # Check cancellation
-    if check_cancelled and check_cancelled():
-        logger.info("Translation cancelled")
-        return extracted_file, None
+        prs = Presentation(input_path)
+        total_slides = len(prs.slides)
+        logger.info(f"  Slides: {total_slides}")
 
-    # 2. Text translation
-    df = translate_dataframe(
-        df,
-        api_key,
-        model,
-        source_lang,
-        target_lang,
-        progress_callback,
-        ai_instruction,
-        check_cancelled,
-    )
+        for slide_num, slide in enumerate(prs.slides):
+            if check_cancelled and check_cancelled():
+                logger.info("Translation cancelled")
+                prs.save(output_path)
+                return extracted_file, translated_file
 
-    # Check cancellation
-    if check_cancelled and check_cancelled():
-        logger.info("Translation cancelled")
-        return extracted_file, None
+            logger.info(f"  Slide {slide_num + 1}/{total_slides} processing...")
 
-    # Save translated text
-    if save_text_files_flag and "translated_text" in df.columns:
-        _, translated_file = save_text_files(df, output_dir, base_filename)
+            if progress_callback:
+                try:
+                    progress_callback(slide_num / total_slides * 0.3)
+                except Exception:
+                    pass
 
-    # Check cancellation
-    if check_cancelled and check_cancelled():
-        logger.info("Translation cancelled")
+            runs_to_translate = []
+
+            # テキストフレームのrun収集
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    for para in shape.text_frame.paragraphs:
+                        for run in para.runs:
+                            if _needs_translation(run.text):
+                                runs_to_translate.append(run)
+
+                # テーブル処理（shape_type == 19）
+                if shape.shape_type == 19:
+                    try:
+                        table = shape.table
+                        for row in table.rows:
+                            for cell in row.cells:
+                                if cell.text_frame:
+                                    for para in cell.text_frame.paragraphs:
+                                        for run in para.runs:
+                                            if _needs_translation(run.text):
+                                                runs_to_translate.append(run)
+                    except Exception as e:
+                        logger.debug(f"Table processing error: {e}")
+
+            if runs_to_translate:
+                texts = [r.text for r in runs_to_translate]
+
+                # 抽出テキストを記録
+                for i, text in enumerate(texts):
+                    all_text_data.append({
+                        "slide_num": slide_num,
+                        "shape_id": i,
+                        "original_text": text,
+                    })
+
+                # バッチ翻訳
+                translated_texts = _translate_texts_batch_for_pdf(
+                    texts, api_key, model, source_lang, target_lang,
+                    ai_instruction if ai_instruction else ""
+                )
+
+                for run, translated in zip(runs_to_translate, translated_texts):
+                    if translated and translated != run.text:
+                        run.text = translated
+
+                # 翻訳テキストを記録
+                for i, translated in enumerate(translated_texts):
+                    data_idx = len(all_text_data) - len(texts) + i
+                    if 0 <= data_idx < len(all_text_data):
+                        all_text_data[data_idx]["translated_text"] = translated
+
+            # ノートスライド処理
+            if slide.has_notes_slide:
+                notes_slide = slide.notes_slide
+                note_runs = []
+                for shape in notes_slide.shapes:
+                    if shape.has_text_frame:
+                        for para in shape.text_frame.paragraphs:
+                            for run in para.runs:
+                                if _needs_translation(run.text):
+                                    note_runs.append(run)
+                if note_runs:
+                    note_texts = [r.text for r in note_runs]
+                    note_translated = _translate_texts_batch_for_pdf(
+                        note_texts, api_key, model, source_lang, target_lang,
+                        ai_instruction if ai_instruction else ""
+                    )
+                    for run, t in zip(note_runs, note_translated):
+                        if t and t != run.text:
+                            run.text = t
+
+            if progress_callback:
+                try:
+                    progress_callback(0.3 + (slide_num + 1) / total_slides * 0.65)
+                except Exception:
+                    pass
+
+        prs.save(output_path)
+        logger.info(f"PPTX translation complete: {output_path}")
+
+        # テキストファイルを保存
+        if all_text_data:
+            text_df = pd.DataFrame(all_text_data)
+            if "translated_text" not in text_df.columns:
+                text_df["translated_text"] = text_df["original_text"]
+            extracted_file, translated_file = save_text_files(text_df, output_dir, base_filename)
+
+        if progress_callback:
+            try:
+                progress_callback(1.0)
+            except Exception:
+                pass
+
         return extracted_file, translated_file
 
-    # 3. Re-import translated text
-    reimport_text_to_pptx(
-        input_path, df, output_path, progress_callback, check_cancelled
-    )
-
-    # Check cancellation
-    if check_cancelled and check_cancelled():
-        logger.info("Translation cancelled")
-        return extracted_file, translated_file
-
-    logger.info(f"PPTX translation complete: {output_path}")
-
-    return extracted_file, translated_file
+    except ImportError:
+        logger.error("python-pptx is not installed")
+        raise ImportError("python-pptx is not installed.")
+    except Exception as e:
+        logger.error(f"PPTX translation error ({input_path}): {e}", exc_info=True)
+        shutil.copy2(input_path, output_path)
+        logger.info("  Error occurred - copied original file")
+        raise
 
 def translate_docx(
     input_path: str,
@@ -2298,14 +2712,13 @@ def translate_document(
             result = translate_pptx(
                 input_path,
                 output_path,
-                api_key,
-                model,
                 source_lang,
                 target_lang,
-                progress_callback,
-                save_text_files_flag,
-                ai_instruction,
-                check_cancelled
+                api_key=api_key,
+                model=model,
+                progress_callback=progress_callback,
+                ai_instruction=ai_instruction,
+                check_cancelled=check_cancelled
             )
         elif file_type == "docx":
             result = translate_docx(

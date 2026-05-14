@@ -69,58 +69,56 @@ RUN mkdir -p /root/.config/libreoffice/4/user \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Excel関連の依存関係を先にインストール
-RUN pip install --no-cache-dir \
-    et-xmlfile>=2.0.0 && \
-    pip install --no-cache-dir \
-    openpyxl>=3.1.0 && \
-    pip install --no-cache-dir \
-    pandas>=1.3.0
+# requirements.txtから依存関係をインストール（段階的に）
+# Excel関連
+RUN pip install --no-cache-dir "et-xmlfile>=2.0.0" && \
+    pip install --no-cache-dir "openpyxl>=3.1.0" && \
+    pip install --no-cache-dir "pandas>=1.3.0"
 
 # 基本的な依存関係をインストール
 RUN pip install --no-cache-dir \
     fastapi==0.104.1 \
     starlette==0.27.0 \
-    uvicorn[standard]==0.24.0 \
+    "uvicorn[standard]==0.24.0" \
     python-multipart==0.0.6 \
     websockets==12.0 \
     python-dotenv==1.0.0
 
 # データ処理関連のパッケージをインストール
-RUN pip install --no-cache-dir python-pptx>=0.6.21 && \
-    pip install --no-cache-dir python-docx>=0.8.11
+RUN pip install --no-cache-dir "python-pptx>=0.6.21" && \
+    pip install --no-cache-dir "python-docx>=0.8.11"
 
 # PDF処理関連パッケージをインストール
 RUN pip install --no-cache-dir \
-    PyPDF2>=3.0.0 \
-    pdfplumber>=0.9.0 \
-    reportlab>=3.6.0
+    "PyPDF2>=3.0.0" \
+    "pdfplumber>=0.9.0" \
+    "reportlab>=3.6.0"
 
 # PyMuPDFを事前ビルド済みホイールでインストール
-RUN pip install --no-cache-dir --only-binary=:all: PyMuPDF>=1.23.0 || \
-    pip install --no-cache-dir --no-deps PyMuPDF>=1.23.0 || \
+RUN pip install --no-cache-dir --only-binary=:all: "PyMuPDF>=1.23.0" || \
+    pip install --no-cache-dir --no-deps "PyMuPDF>=1.23.0" || \
     echo "PyMuPDF installation failed, will use alternative PDF processing"
 
 # pdf2docxをインストール（PyMuPDFが利用可能な場合のみ）
 RUN python3 -c "import fitz" && \
-    pip install --no-cache-dir pdf2docx>=0.5.6 || \
+    pip install --no-cache-dir "pdf2docx>=0.5.6" || \
     echo "pdf2docx installation skipped due to PyMuPDF unavailability"
 
 # docx2pdfをインストール
-RUN pip install --no-cache-dir comtypes>=1.1.0 && \
-    pip install --no-cache-dir docx2pdf>=0.1.8 || \
+RUN pip install --no-cache-dir "comtypes>=1.1.0" && \
+    pip install --no-cache-dir "docx2pdf>=0.1.8" || \
     echo "docx2pdf installation failed, will use LibreOffice fallback"
 
 # その他のユーティリティをインストール
 RUN pip install --no-cache-dir \
-    requests>=2.26.0 \
-    tqdm>=4.62.0 \
-    Pillow>=9.0.0 \
-    python-magic>=0.4.27 \
-    nltk>=3.8 \
-    cryptography>=41.0.0 \
-    prometheus-client>=0.17.0 \
-    fonttools>=4.38.0 \
+    "requests>=2.26.0" \
+    "tqdm>=4.62.0" \
+    "Pillow>=9.0.0" \
+    "python-magic>=0.4.27" \
+    "nltk>=3.8" \
+    "cryptography>=41.0.0" \
+    "prometheus-client>=0.17.0" \
+    "fonttools>=4.38.0" \
     httpx==0.24.1
 
 # アプリケーションコードのコピー
