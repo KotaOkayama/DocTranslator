@@ -1,6 +1,6 @@
 services:
   document-translator:
-    image: doctranslator-document-translator:latest
+    image: ghcr.io/kotaokayama/doctranslator:latest
     ports:
       - "8000:8000"
     environment:
