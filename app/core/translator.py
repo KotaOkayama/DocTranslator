@@ -194,35 +194,52 @@ def fetch_available_models() -> Dict[str, str]:
     if not api_url:
         raise ValueError("API URL is not set. Please configure API URL in settings.")
     
-    # Build models endpoint URL
-    # Convert chat endpoint to models endpoint
-    if api_url.endswith("/chat/completions"):
-        models_url = api_url.replace("/chat/completions", "/models")
-    elif api_url.endswith("/v1/chat/completions"):
-        models_url = api_url.replace("/v1/chat/completions", "/v1/models")
+    # Build models endpoint URL - try multiple patterns
+    # Generate candidate URLs to try
+    candidate_urls = []
+    if api_url.endswith("/v1/chat/completions"):
+        candidate_urls.append(api_url.replace("/v1/chat/completions", "/v1/models"))
+        candidate_urls.append(api_url.replace("/v1/chat/completions", "/models"))
+    elif api_url.endswith("/chat/completions"):
+        candidate_urls.append(api_url.replace("/chat/completions", "/models"))
+        candidate_urls.append(api_url.replace("/chat/completions", "/v1/models"))
     else:
-        # Fallback: append /models to URL
-        models_url = api_url.rstrip("/") + "/models"
-    
+        # Fallback: append /models or /v1/models to URL
+        base = api_url.rstrip("/")
+        candidate_urls.append(base + "/models")
+        candidate_urls.append(base + "/v1/models")
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+
+    response = None
+    last_error = None
+    for models_url in candidate_urls:
+        try:
+            logger.debug(f"Models fetch URL: {models_url}")
+            response = requests.get(
+                models_url,
+                headers=headers,
+                timeout=30
+            )
+            logger.debug(f"API response status: {response.status_code}")
+            if response.status_code == 200:
+                break  # success
+            else:
+                logger.warning(f"Models fetch failed with URL {models_url}: status {response.status_code}")
+                last_error = f"Status code: {response.status_code}"
+        except requests.exceptions.RequestException as req_err:
+            logger.warning(f"Models fetch request error for URL {models_url}: {req_err}")
+            last_error = str(req_err)
+            response = None
+
     try:
-        logger.debug(f"Models fetch URL: {models_url}")
-        response = requests.get(
-            models_url,
-            headers=headers,
-            timeout=30
-        )
-        
-        logger.debug(f"API response status: {response.status_code}")
-        
-        if response.status_code != 200:
-            logger.error(f"Models fetch error: status code {response.status_code}")
-            logger.error(f"Response: {response.text}")
-            raise ValueError(f"Failed to fetch models. Status code: {response.status_code}")
+        if response is None or response.status_code != 200:
+            err_msg = last_error or "Unknown error"
+            logger.error(f"All candidate URLs failed. Last error: {err_msg}")
+            raise ValueError(f"Failed to fetch models. {err_msg}")
         
         result = response.json()
         logger.debug(f"API response: {result}")
